@@ -1,0 +1,12 @@
+# Bin files.
+.exe
+.dll
+.bin
+.dat
+.o
+.so
+.a
+.lib
+.class
+atlas
+
