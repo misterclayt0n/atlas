@@ -1,5 +1,5 @@
 build: 
-	@odin build .
+	@odin build . 
 
 run: build
 	@./atlas
