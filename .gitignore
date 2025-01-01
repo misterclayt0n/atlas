@@ -9,4 +9,15 @@
 .lib
 .class
 atlas
-
+*.sublime-workspace
+*.raddbgi
+*.raddbg
+*.exp
+*.rdi
+*.obj
+*.lib
+log.txt
+*.dylib
+*.dSYM
+linux
+atlas.png

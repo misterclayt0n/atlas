@@ -1,16 +1,12 @@
 // TODO: Proper error handling. For now, I'm basicaly just ignoring errors.
 package engine
 
-import "core:fmt"
-import vmem "core:mem/virtual"
-import "core:os"
 import rl "vendor:raylib"
 
 Buffer :: struct {
-	bytes:       [dynamic]u8, // Dynamic array of bytes that containts text.
+	bytes:       [dynamic]u8,  // Dynamic array of bytes that containts text.
 	line_starts: [dynamic]int, // Indexes of the beginning of each line in the array byte.
-	dirty:       bool, // If the buffer has been modified.
-	font:        ^rl.Font,
+	dirty:       bool,         // If the buffer has been modified.
 	cursor:      Cursor,
 }
 
@@ -21,7 +17,7 @@ Cursor :: struct {
 	col:   int,         // Current column number.
 	style: CursorStyle, // Visual style of the cursor.
 	color: rl.Color,    // Color of the cursor.
-	blink: bool         // If it blinks or not.
+	blink: bool,        // If it blinks or not.
 }
 
 CursorStyle :: enum {
@@ -35,8 +31,15 @@ buffer_init :: proc(font: ^rl.Font, allocator := context.allocator) -> Buffer {
 		bytes = make([dynamic]u8, 0, 1024, allocator),
 		line_starts = make([dynamic]int, 1, 64, allocator),
 		dirty = false,
-		font = font,
-		cursor = Cursor{pos = 0, sel = 0, line = 0, col = 0, style = .Bar, color = rl.BLACK, blink = true},
+		cursor = Cursor {
+			pos = 0,
+			sel = 0,
+			line = 0,
+			col = 0,
+			style = .Bar,
+			color = rl.BLACK,
+			blink = true,
+		},
 	}
 }
 
@@ -74,7 +77,7 @@ buffer_insert_char :: proc(buffer: ^Buffer, char: rune) {
 
 	offset := buffer.cursor.pos
 	if offset < 0 || offset > len(buffer.bytes) do return
-	
+
 	// Make space for new character.
 	resize(&buffer.bytes, len(buffer.bytes) + 1)
 
@@ -128,59 +131,51 @@ buffer_update_line_starts :: proc(buffer: ^Buffer) {
 // Drawing
 // 
 
-buffer_draw_cursor :: proc(buffer: ^Buffer, position: rl.Vector2, font_size: f32, spacing: f32) {
-    cursor_pos := position
-    if buffer.cursor.pos > 0 && len(buffer.bytes) > 0 {
-        // Ensure null termination for measurement
-        append(&buffer.bytes, 0)
-        defer resize(&buffer.bytes, len(buffer.bytes)-1)
-        
-        temp_text := buffer.bytes[:buffer.cursor.pos]
-        cursor_pos.x += rl.MeasureTextEx(
-            buffer.font^,
-            cstring(&temp_text[0]),
-            font_size,
-            spacing,
-        ).x
-    }
+buffer_draw_cursor :: proc(buffer: ^Buffer, position: rl.Vector2, font_size: f32, spacing: f32, font: rl.Font) {
+	cursor_pos := position
+	if buffer.cursor.pos > 0 && len(buffer.bytes) > 0 {
+		// Ensure null termination for measurement
+		append(&buffer.bytes, 0)
+		defer resize(&buffer.bytes, len(buffer.bytes) - 1)
 
-    // Blink effect
-    if buffer.cursor.blink && (int(rl.GetTime() * 2) % 2 == 0) do return
+		temp_text := buffer.bytes[:buffer.cursor.pos]
+		cursor_pos.x +=
+			rl.MeasureTextEx(font, cstring(&temp_text[0]), font_size, spacing).x
+	}
 
-    switch buffer.cursor.style {
-    case .Bar:
-        rl.DrawLineV(
-            cursor_pos,
-            {cursor_pos.x, cursor_pos.y + font_size},
-            buffer.cursor.color,
-        )
-    case .Block:
-        char_width := rl.MeasureTextEx(buffer.font^, "@", font_size, spacing).x
-        rl.DrawRectangleV(
-            cursor_pos,
-            {char_width, font_size},
-            {buffer.cursor.color.r, buffer.cursor.color.g, buffer.cursor.color.b, 128},
-        )
-    case .Underscore:
-        char_width := rl.MeasureTextEx(buffer.font^, "M", font_size, spacing).x
-        rl.DrawLineV(
-            {cursor_pos.x, cursor_pos.y + font_size},
-            {cursor_pos.x + char_width, cursor_pos.y + font_size},
-            buffer.cursor.color,
-        )
-    }
+	// Blink effect
+	if buffer.cursor.blink && (int(rl.GetTime() * 2) % 2 == 0) do return
+
+	switch buffer.cursor.style {
+	case .Bar:
+		rl.DrawLineV(cursor_pos, {cursor_pos.x, cursor_pos.y + font_size}, buffer.cursor.color)
+	case .Block:
+		char_width := rl.MeasureTextEx(font, "@", font_size, spacing).x
+		rl.DrawRectangleV(
+			cursor_pos,
+			{char_width, font_size},
+			{buffer.cursor.color.r, buffer.cursor.color.g, buffer.cursor.color.b, 128},
+		)
+	case .Underscore:
+		char_width := rl.MeasureTextEx(font, "M", font_size, spacing).x
+		rl.DrawLineV(
+			{cursor_pos.x, cursor_pos.y + font_size},
+			{cursor_pos.x + char_width, cursor_pos.y + font_size},
+			buffer.cursor.color,
+		)
+	}
 }
 
-buffer_draw :: proc(buffer: ^Buffer, position: rl.Vector2, font_size: f32, spacing: f32) {
+buffer_draw :: proc(buffer: ^Buffer, position: rl.Vector2, font_size: f32, spacing: f32, font: rl.Font) {
 	// Draw text only if we have some content in the buffer.
 	if len(buffer.bytes) > 0 {
 		// Ensure null termination for text display.
 		append(&buffer.bytes, 0)
-		defer resize(&buffer.bytes, len(buffer.bytes)-1)
+		defer resize(&buffer.bytes, len(buffer.bytes) - 1)
 
 		// Draw main text.
 		rl.DrawTextEx(
-			buffer.font^,
+			font,
 			cstring(&buffer.bytes[0]),
 			position,
 			font_size,
@@ -190,6 +185,5 @@ buffer_draw :: proc(buffer: ^Buffer, position: rl.Vector2, font_size: f32, spaci
 	}
 
 	// Always draw the cursor, regardless of buffer content.
-	buffer_draw_cursor(buffer, position, font_size, spacing)
+	buffer_draw_cursor(buffer, position, font_size, spacing, font)
 }
-
