@@ -23,7 +23,7 @@ Atlas is a **fast**, **lightweight** text editor inspired by the philosophy of E
 Not ordered.
 
 - [ ] **Complete text viewer**
-- [ ] **Hot reload**: Hot reload setup for easier configuration/development.
+- [x] **Hot reload**: Hot reload setup for easier configuration/development.
 - [ ] **Modal editing**
 - [ ] **Configurable keybindings**: Allow users to customize shortcuts (Something inspired by the [Focus](https://github.com/focus-editor/focus) editor way of configuring).
 - [ ] **Advanced movement**: Add more advanced navigation (e.g., jump to beginning/end of line, next word, etc.).
