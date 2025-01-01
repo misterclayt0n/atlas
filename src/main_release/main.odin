@@ -5,7 +5,7 @@ package main_release
 import "core:log"
 import "core:os"
 
-import atlas "../atlas"
+import atlas "../"
 
 USE_TRACKING_ALLOCATOR :: #config(USE_TRACKING_ALLOCATOR, false)
 

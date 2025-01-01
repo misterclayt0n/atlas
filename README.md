@@ -3,15 +3,16 @@
 Atlas is a **fast**, **lightweight** text editor inspired by the philosophy of Emacs, Neovim, and Zed. Its main goal is to be **simple to set up**, **simple to use**, and **optionally modal**—allowing you to switch between editing and command modes if you desire, while still being able to operate in a more traditional “insert mode only” style.
 
 ## Getting Started
+**NOTE**: You must have the [Odin](https://odin-lang.org/) compiler installed.
 
 1. **Clone** the repository:
    ```bash
    git clone https://github.com/misterclayt0n/atlas
    ```
-2. **Build** the project:
+2. **Build** the project (Release version):
    ```bash
    cd atlas
-   make build
+   ./build_release.sh
    ```
 3. **Run** the binary:
    ```bash
