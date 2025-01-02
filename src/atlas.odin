@@ -14,14 +14,21 @@
 
 package atlas
 
+import clay "../clay-odin"
 import eg "engine"
 import rl "vendor:raylib"
+
+errorHandler :: proc "c" (errorData: clay.ErrorData) {
+	if (errorData.errorType == clay.ErrorType.DUPLICATE_ID) {}
+}
 
 AtlasState :: struct {
 	buffer:    eg.Buffer,
 	font:      rl.Font,
 	font_size: f32,
 	spacing:   f32,
+	arena:     clay.Arena,
+	memory:    [^]u8,
 }
 
 atlas_mem: ^AtlasState
@@ -46,9 +53,31 @@ update :: proc() {
 // Draws the state.
 // Note: main_hot_reload.odin clears the temp allocator at end of frame.
 draw :: proc() {
+	clay.BeginLayout()
+
+	if clay.UI(
+		clay.Layout(
+			{
+				sizing = {width = clay.SizingGrow({}), height = clay.SizingGrow({})},
+				padding = {16, 16},
+			},
+		),
+		clay.Rectangle({color = clay.Color{0, 255, 0, 255}}),
+	) {
+	}
+
+	render_commands := clay.EndLayout()
+
 	rl.BeginDrawing()
-	rl.ClearBackground(rl.GRAY)
-	eg.buffer_draw(&atlas_mem.buffer, rl.Vector2{10, 10}, atlas_mem.font_size, atlas_mem.spacing, atlas_mem.font)
+	rl.ClearBackground(rl.BLACK)
+	eg.buffer_draw(
+		&atlas_mem.buffer,
+		rl.Vector2{10, 10},
+		atlas_mem.font_size,
+		atlas_mem.spacing,
+		atlas_mem.font,
+	)
+	eg.clayRaylibRender(&render_commands)
 
 	rl.EndDrawing()
 }
@@ -80,6 +109,15 @@ atlas_init :: proc() {
 	// Initialize buffer with the loaded font.
 	atlas_mem.buffer = eg.buffer_init(&atlas_mem.font)
 
+	minMemorySize: u32 = clay.MinMemorySize()
+	atlas_mem.memory = make([^]u8, minMemorySize)
+	atlas_mem.arena = clay.CreateArenaWithCapacityAndMemory(minMemorySize, atlas_mem.memory)
+	clay.Initialize(
+		atlas_mem.arena,
+		{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()},
+		{handler = errorHandler},
+	)
+
 	atlas_hot_reloaded(atlas_mem)
 }
 
@@ -88,8 +126,16 @@ atlas_shutdown :: proc() {
 	if atlas_mem != nil {
 		eg.buffer_free(&atlas_mem.buffer)
 		rl.UnloadFont(atlas_mem.font)
-		free(atlas_mem)
 
+		// Liberar a memória alocada para a arena
+		if atlas_mem.memory != nil {
+			free(atlas_mem.memory)
+			atlas_mem.memory = nil
+		}
+
+		// Liberar o estado do Atlas
+		free(atlas_mem)
+		atlas_mem = nil
 	}
 }
 
@@ -111,6 +157,15 @@ atlas_memory_size :: proc() -> int {
 @(export)
 atlas_hot_reloaded :: proc(mem: rawptr) {
 	atlas_mem = (^AtlasState)(mem)
+
+	// Initialize clay again.
+	if atlas_mem != nil {
+		clay.Initialize(
+			atlas_mem.arena,
+			{cast(f32)rl.GetScreenWidth(), cast(f32)rl.GetScreenHeight()},
+			{handler = errorHandler},
+		)
+	}
 }
 
 @(export)
