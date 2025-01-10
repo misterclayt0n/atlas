@@ -43,27 +43,18 @@ update :: proc() {
 		eg.buffer_delete_char(&atlas_mem.buffer)
 	}
 
-	// Cursor movement
-	if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(rl.KeyboardKey.LEFT) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .Left)
-	}
-	if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(rl.KeyboardKey.RIGHT) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .Right)
-	}
-	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(rl.KeyboardKey.UP) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .Up)
-	}
-	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(rl.KeyboardKey.DOWN) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .Down)
-	}
-	if rl.IsKeyPressed(.HOME) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .LineStart)
-	}
-	if rl.IsKeyPressed(.END) {
-		eg.buffer_move_cursor(&atlas_mem.buffer, .LineEnd)
-	}
+	// Cursor movement.
+	if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(rl.KeyboardKey.LEFT) do eg.buffer_move_cursor(&atlas_mem.buffer, .Left)
+	if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(rl.KeyboardKey.RIGHT) do eg.buffer_move_cursor(&atlas_mem.buffer, .Right)
+	if rl.IsKeyPressed(.UP) || rl.IsKeyPressedRepeat(rl.KeyboardKey.UP) do eg.buffer_move_cursor(&atlas_mem.buffer, .Up)
+	if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressedRepeat(rl.KeyboardKey.DOWN) do eg.buffer_move_cursor(&atlas_mem.buffer, .Down)
+	if rl.IsKeyPressed(.HOME) do eg.buffer_move_cursor(&atlas_mem.buffer, .LineStart)
+	if rl.IsKeyPressed(.END) do eg.buffer_move_cursor(&atlas_mem.buffer, .LineEnd)
 
-	// Word movement (with Ctrl key)
+	// Enter key.
+	if rl.IsKeyPressed(.ENTER) do eg.buffer_insert_char(&atlas_mem.buffer, '\n')
+
+	// Word movement (with Ctrl key).
 	if rl.IsKeyDown(.LEFT_CONTROL) {
 		if rl.IsKeyPressed(.LEFT) {
 			eg.buffer_move_cursor(&atlas_mem.buffer, .WordLeft)

@@ -88,7 +88,10 @@ buffer_insert_text :: proc(buffer: ^Buffer, text: string) {
 }
 
 buffer_insert_char :: proc(buffer: ^Buffer, char: rune) {
-	if char < 32 || char >= 127 do return
+	// Only ASCII characters.
+	// TODO: Make so that I'm able to insert any sort of grapheme into this buffer.
+	// This will probably demand some big changes on how this buffer works currently.
+	if (char < 32 && char != '\n') || char >= 127 do return
 
 	offset := buffer.cursor.pos
 	if offset < 0 || offset > len(buffer.bytes) do return
@@ -168,7 +171,7 @@ buffer_move_cursor :: proc(buffer: ^Buffer, movement: CursorMovement) {
 		if buffer.cursor.line < len(buffer.line_starts) - 1 {
 			// Same stuff as before.
 			target_col := buffer.cursor.col
-			new_line := buffer.cursor.line - 1
+			new_line := buffer.cursor.line + 1
 
 			// Calculate new position.
 			line_length := buffer_line_length(buffer, new_line)
@@ -221,6 +224,8 @@ buffer_move_cursor :: proc(buffer: ^Buffer, movement: CursorMovement) {
 			}
 		}
 	}
+
+	buffer_update_line_starts(buffer)
 }
 
 //
@@ -242,18 +247,25 @@ buffer_draw_cursor :: proc(
 	// Calculate horizontal position within the current line.
 	if buffer.cursor.pos > 0 && len(buffer.bytes) > 0 {
 		line_start := buffer.line_starts[buffer.cursor.line]
-		line_text := buffer.bytes[line_start:buffer.cursor.pos]
+		
+		// Make sure we don't slice beyond the buffer size.
+		cursor_pos_clamped := min(buffer.cursor.pos, len(buffer.bytes))
+		if line_start < cursor_pos_clamped {
+			line_text := buffer.bytes[line_start:buffer.cursor.pos]
 
-		if len(line_text) > 0 {
-			// Create temporary buffer for measurement.
-			temp_text := make([dynamic]u8, len(line_text) + 1)
-			defer delete(temp_text)
+			if len(line_text) > 0 {
+				// Create temporary buffer for measurement.
+				temp_text := make([dynamic]u8, len(line_text) + 1)
+				defer delete(temp_text)
 
-			copy(temp_text[:], line_text)
-			temp_text[len(line_text)] = 0
+				copy(temp_text[:], line_text)
+				temp_text[len(line_text)] = 0
 
-			cursor_pos.x += rl.MeasureTextEx(font, cstring(&temp_text[0]), font_size, spacing).x
+				cursor_pos.x += rl.MeasureTextEx(font, cstring(&temp_text[0]), font_size, spacing).x
+			}
 		}
+
+
 	}
 
 	// Blink effect
