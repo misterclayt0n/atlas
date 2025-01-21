@@ -247,7 +247,7 @@ buffer_draw_cursor :: proc(
 	// Calculate horizontal position within the current line.
 	if buffer.cursor.pos > 0 && len(buffer.bytes) > 0 {
 		line_start := buffer.line_starts[buffer.cursor.line]
-		
+
 		// Make sure we don't slice beyond the buffer size.
 		cursor_pos_clamped := min(buffer.cursor.pos, len(buffer.bytes))
 		if line_start < cursor_pos_clamped {
@@ -324,6 +324,10 @@ buffer_line_length :: proc(buffer: ^Buffer, line: int) -> int {
 
 	if line < len(buffer.line_starts) - 1 {
 		end = buffer.line_starts[line + 1]
+
+		// Subtract 1 to exclude the newline character.
+		// Only considers visible characters.
+		return end - start - 1
 	}
 
 	return end - start
