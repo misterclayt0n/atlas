@@ -1,36 +1,60 @@
 # Atlas Text Editor
 
-Atlas is a **fast**, **lightweight** text editor inspired by the philosophy of Emacs, Neovim, and Zed. Its main goal is to be **simple to set up**, **simple to use**, and **optionally modal**—allowing you to switch between editing and command modes if you desire, while still being able to operate in a more traditional “insert mode only” style.
+Atlas is a **fast**, **lightweight** text editor inspired by the philosophy of Emacs, Neovim, and Zed. Its main goal is to be **simple to set up**, **simple to use**, and **optionally modal**—allowing you to switch between editing and command modes if you desire, while still being able to operate in a more traditional "insert mode only" style.
 
 ## Getting Started
-**NOTE**: You must have the [Odin](https://odin-lang.org/) compiler installed.
+**NOTE**: You must have [Rust](https://www.rust-lang.org/tools/install) installed.
 
 1. **Clone** the repository:
    ```bash
    git clone https://github.com/misterclayt0n/atlas
    ```
-2. **Build** the project (Release version):
+2. **Build** the project:
    ```bash
    cd atlas
-   ./build_release.sh
+   cargo build --release
    ```
 3. **Run** the binary:
    ```bash
-   ./atlas
+   cargo run --release
    ```
+
+## Development
+For development, you can use:
+```bash
+cargo run
+```
 
 ## Roadmap / TODO
 
-Not ordered.
+Not ordered by priority.
 
-- [ ] **Complete text viewer**
-- [x] **Hot reload**: Hot reload setup for easier configuration/development.
-- [ ] **Modal editing**
-- [ ] **Configurable keybindings**: Allow users to customize shortcuts (Something inspired by the [Focus](https://github.com/focus-editor/focus) editor way of configuring).
-- [ ] **Advanced movement**: Add more advanced navigation (e.g., jump to beginning/end of line, next word, etc.).
-- [ ] **Text selection** (visual mode) and basic cut/copy/paste.
-- [ ] **Multiple buffers/tabs**: Handle more than one file in the same session.
-- [ ] **Syntax highlighting**: Provide at least a minimal form or plugin system for highlighting.
+- [ ] **Basic text editing**: Implement fundamental text editing operations
+  - [x] Basic text display
+  - [ ] Text input handling
+  - [ ] Cursor movement
+  - [ ] Basic editing operations (insert, delete)
+- [ ] **Modal editing**:
+  - [ ] Basic mode switching (Normal/Insert)
+  - [ ] Command mode
+  - [ ] Visual mode
+- [ ] **Buffer Management**:
+  - [ ] Multiple buffers support
+  - [ ] Buffer switching
+  - [ ] File loading/saving
+- [ ] **UI Improvements**:
+  - [ ] Status line
+  - [ ] Line numbers
+  - [ ] Cursor visualization
+- [ ] **Advanced Features**:
+  - [ ] Syntax highlighting
+  - [ ] Search and replace
+  - [ ] Undo/Redo
+  - [ ] Split views
+- [ ] **Configuration**:
+  - [ ] Customizable keybindings
+  - [ ] Themes
+  - [ ] User configuration file
 
 ## Contributing
 
