@@ -1,45 +1,11 @@
-use iced::{
-    widget::{container, text, Column},
-    Element, Length, Theme,
-};
+use engine::workspace::Workspace;
+use iced::Element;
 
-/// Main structure for manipulating text.
-#[derive(Debug, Clone, Default)]
-pub struct Buffer {
-    pub content: String, // TODO: Refactor this to a Rope.
-                         // TODO: Add line_count.
-}
-
-impl Buffer {
-    pub fn new() -> Self {
-        Self {
-            content: String::new(),
-        }
-    }
-
-    pub fn insert_char(&mut self, char: char, position: usize) {
-        self.content.insert(position, char);
-    }
-}
-
-#[derive(Default)]
-pub struct Cursor {
-    pub row: usize,
-    pub col: usize,
-    pub position: usize, // Linear position in the buffer.
-}
-
-impl Cursor {
-    pub fn new() -> Self {
-        Self {
-            row: 0,
-            col: 0,
-            position: 0,
-        }
-    }
-}
+mod engine;
+mod ui;
 
 #[derive(Debug, Clone)]
+/// Represents possible actions that can be performed in the editor
 pub enum Message {
     TextInput(String),
     CursorMove(CursorMovement),
@@ -54,51 +20,47 @@ pub enum CursorMovement {
     // TODO: Add more movement.
 }
 
+/// Main application structure.
+/// Manages the overall editor state and handles high-level operations.
 pub struct Atlas {
-    pub current_buffer: Buffer,
-    pub cursor: Cursor,
-    pub theme: Theme,
-    pub fuck: bool,
+    workspace: Workspace,
 }
 
 impl Default for Atlas {
     fn default() -> Self {
         Self {
-            current_buffer: Buffer::default(),
-            cursor: Cursor::default(),
-            theme: Theme::Dark,
-            fuck: true
+            workspace: Workspace::new(),
         }
     }
 }
 
 impl Atlas {
+    /// Generates the window title based on the active buffer
     fn title(&self) -> String {
-        if self.fuck == true {
-            return "Got fucked".to_string();
+        let buffer_name = &self.workspace.active_window().buffer.name;
+
+        if buffer_name.is_empty() {
+            return "Atlas".to_string();
         }
 
-        return "Not fucked at all".to_string();
+        format!("Atlas - {}", buffer_name)
     }
 
+    /// Handles all editor actions and updates state accordingly
     fn update(&mut self, message: Message) {
         match message {
-            Message::TextInput(text) => self.current_buffer.content = text,
+            Message::TextInput(text) => {
+                let window = self.workspace.active_window_mut();
+                window.buffer.content = text.into();
+            }
             Message::CursorMove(_) => {}
         }
     }
 
+    /// Renders the entire editor interface
     fn view(&self) -> Element<Message> {
-        // Create a column that will hold our widgets vertically.
-        let content = Column::new()
-            .push(text(self.title()))
-            .push(text(&self.current_buffer.content))
-            // Show buffer content.
-            .width(Length::Fill)
-            .spacing(20); // Add some spacing in between
-
-        // Wrap it in a container.
-        container(content).width(Length::Fill).height(Length::Fill).into()
+        // Render
+        self.workspace.view()
     }
 }
 

@@ -25,6 +25,13 @@ For development, you can use:
 cargo run
 ```
 
+## Overall Architecture
+- `Atlas`: Top-level application
+  - `Workspace`: Manages multiple windows
+    - `Window`: View into a buffer with position/scroll info
+      - `Buffer`: Actual text content
+      - `Editor`: Widget that renders the content
+
 ## Roadmap / TODO
 
 Not ordered by priority.
