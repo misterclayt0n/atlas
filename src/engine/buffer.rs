@@ -16,4 +16,18 @@ impl Buffer {
             name: name.to_string(),
         }
     }
+
+    pub fn visible_line_content(&self, line: usize) -> String {
+        let line_content = self.content.line(line);
+        let content_str = line_content.to_string();
+
+        content_str
+            .trim_end_matches('\r')
+            .trim_end_matches('\n')
+            .to_string()
+    }
+
+    pub fn visual_line_length(&self, line: usize) -> usize {
+        self.visible_line_content(line).chars().count()
+    }
 }

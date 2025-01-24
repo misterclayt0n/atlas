@@ -5,7 +5,7 @@ mod engine;
 mod ui;
 
 #[derive(Debug, Clone)]
-/// Represents possible actions that can be performed in the editor
+/// Represents possible actions that can be performed in the editor.
 pub enum Message {
     TextInput(String),
     CursorMove(CursorMovement),
@@ -53,7 +53,9 @@ impl Atlas {
                 let window = self.workspace.active_window_mut();
                 window.buffer.content = text.into();
             }
-            Message::CursorMove(_) => {}
+            Message::CursorMove(movement) => {
+                self.workspace.active_window_mut().editor_mut().move_cursor(movement);
+            }
         }
     }
 
