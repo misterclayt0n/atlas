@@ -11,10 +11,7 @@ use iced::{
 };
 
 use crate::{
-    engine::{
-        buffer::Buffer,
-        cursor::{Cursor, TextPosition},
-    },
+    engine::{buffer::Buffer, cursor::Cursor},
     CursorMovement, Message,
 };
 
@@ -56,119 +53,12 @@ impl Editor {
         }
     }
 
-    // Movement calculations
-    fn compute_position_left(&self) -> Option<TextPosition> {
-        let current = self.cursor.position();
-
-        if current.col > 0 {
-            // Move left in the current line.
-            Some(TextPosition::new(
-                current.line,
-                current.col - 1,
-                current.offset - 1,
-            ))
-        } else if current.line > 0 {
-            // Move to end of previous line
-            let prev_line = self.buffer.content.line(current.line - 1);
-            Some(TextPosition::new(
-                current.line - 1,
-                prev_line.len_chars(),
-                current.offset - 1,
-            ))
-        } else {
-            None
-        }
-    }
-
-    fn compute_position_right(&self) -> Option<TextPosition> {
-        let current = self.cursor.position();
-        let visual_len = self.buffer.visual_line_length(current.line);
-
-        println!("Current col: {}; Visual len: {}", current.col, visual_len);
-
-        if current.col < visual_len {
-            // Move right within the current line.
-            Some(TextPosition::new(
-                current.line,
-                current.col + 1,
-                current.offset + 1,
-            ))
-        } else if current.line < self.buffer.content.len_lines() - 1 {
-            // Move to the start of next line.
-            // TODO: Remove this behavior.
-            Some(TextPosition::new(
-                current.line + 1,
-                0,
-                self.buffer.content.line_to_byte(current.line + 1),
-            ))
-        } else {
-            None
-        }
-    }
-
-    fn compute_position_up(&self) -> Option<TextPosition> {
-        let current = self.cursor.position();
-        if current.line > 0 {
-            let target_col = if let Some(preferred) = self.get_preferred_column() {
-                preferred
-            } else {
-                current.col
-            };
-
-            let prev_line_len = self.buffer.content.line(current.line - 1).len_chars();
-            let new_col = target_col.min(prev_line_len);
-
-            Some(TextPosition::new(
-                current.line - 1,
-                new_col,
-                self.calculate_offset(current.line - 1, new_col),
-            ))
-        } else {
-            None
-        }
-    }
-
-    fn compute_position_down(&self) -> Option<TextPosition> {
-        let current = self.cursor.position();
-        if current.line < self.buffer.content.len_lines() - 1 {
-            let target_col = if let Some(preferred) = self.get_preferred_column() {
-                preferred
-            } else {
-                current.col
-            };
-
-            let next_line_len = self.buffer.content.line(current.line + 1).len_chars();
-            let new_col = target_col.min(next_line_len);
-
-            Some(TextPosition::new(
-                current.line + 1,
-                new_col,
-                self.buffer.content.line_to_byte(current.line + 1) + new_col,
-            ))
-        } else {
-            None
-        }
-    }
-
-    fn calculate_offset(&self, line: usize, col: usize) -> usize {
-        self.buffer.content.line_to_byte(line) + col
-    }
-
-    fn get_preferred_column(&self) -> Option<usize> {
-        match &self.cursor {
-            Cursor::Normal {
-                preferred_column, ..
-            } => *preferred_column,
-            _ => None,
-        }
-    }
-
     pub fn move_cursor(&mut self, movement: CursorMovement) {
         let new_position = match movement {
-            CursorMovement::Left => self.compute_position_left(),
-            CursorMovement::Right => self.compute_position_right(),
-            CursorMovement::Up => self.compute_position_up(),
-            CursorMovement::Down => self.compute_position_down(),
+            CursorMovement::Left => self.cursor.move_left(&self.buffer),
+            CursorMovement::Right => self.cursor.move_right(&self.buffer),
+            CursorMovement::Up => self.cursor.move_up(&self.buffer),
+            CursorMovement::Down => self.cursor.move_down(&self.buffer),
         };
 
         if let Some(position) = new_position {
