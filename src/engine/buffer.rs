@@ -30,4 +30,8 @@ impl Buffer {
     pub fn visual_line_length(&self, line: usize) -> usize {
         self.visible_line_content(line).chars().count()
     }
+
+    pub fn insert_char(&mut self, offset: usize, c: char) {
+        self.content.insert_char(offset, c)
+    }
 }

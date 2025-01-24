@@ -2,7 +2,7 @@ use iced::Element;
 
 use crate::Message;
 
-use super::{buffer::Buffer, window::Window};
+use super::window::Window;
 
 /// Top-level structure that manages multiple windows and buffers.
 /// Handles window layout and active window selection.
@@ -14,7 +14,7 @@ pub struct Workspace {
 impl Workspace {
     pub fn new() -> Self {
         // Create initial window with empty buffer.
-        let initial_window = Window::new(Buffer::new("Some amazing content", "Initial Buffer")); // MOCKED.
+        let initial_window = Window::new(); // MOCKED.
         Self {
             windows: vec![initial_window],
             active_window: 0,

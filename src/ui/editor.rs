@@ -19,8 +19,8 @@ use crate::{
 /// Responsible for rendering text, cursor, and handling visual aspects.
 #[derive(Clone)]
 pub struct Editor {
-    buffer: Buffer,
-    cursor: Cursor,
+    pub buffer: Buffer,
+    pub cursor: Cursor,
 }
 
 // Add a small focus flag to your Editor's state
@@ -46,9 +46,9 @@ impl Editor {
         return size * 1.2;
     }
 
-    pub fn new(buffer: Buffer) -> Self {
+    pub fn new() -> Self {
         Self {
-            buffer,
+            buffer: Buffer::new("Amazing", "Yes"),
             cursor: Cursor::new(),
         }
     }
@@ -68,7 +68,7 @@ impl Editor {
                     preferred_column,
                 } => {
                     *pos = position;
-                    // Update preferred column for vertical movements
+                    // Update preferred column for vertical movements.
                     if matches!(movement, CursorMovement::Up | CursorMovement::Down) {
                         *preferred_column = Some(position.col);
                     }
@@ -86,12 +86,10 @@ where
     Renderer: renderer::Renderer + iced::advanced::text::Renderer, // This is used to render some text.
     Message:,
 {
-    // 1) Tag your custom editor's state type
     fn tag(&self) -> widget::tree::Tag {
         widget::tree::Tag::of::<EditorState>()
     }
 
-    // 2) Initialize the `EditorState` once, when your widget is first created
     fn state(&self) -> widget::tree::State {
         widget::tree::State::new(EditorState::default())
     }
@@ -106,7 +104,7 @@ where
         _renderer: &Renderer,
         limits: &iced::advanced::layout::Limits,
     ) -> iced::advanced::layout::Node {
-        // Create a simple layout node that fills the available space
+        // Create a simple layout node that fills the available space.
         let size = limits.max();
         layout::Node::new(size)
     }
@@ -193,7 +191,7 @@ where
         let editor_state = tree.state.downcast_mut::<EditorState>();
 
         match event {
-            // 1) Mouse: handle focus/unfocus
+            // 1) Mouse: handle focus/unfocus.
             Event::Mouse(mouse_event) => match mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     // If clicked inside our widget, focus. Otherwise, unfocus.
@@ -207,9 +205,9 @@ where
                 _ => {}
             },
 
-            // 2) Keyboard input
-            Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
-                // Only capture if we are focused
+            // 2) Keyboard input.
+            Event::Keyboard(keyboard::Event::KeyPressed { key, text, .. }) => {
+                // Only capture if we are focused.
                 if editor_state.is_focused {
                     match key {
                         Key::Named(keyboard::key::Named::ArrowUp) => {
@@ -227,6 +225,30 @@ where
                         Key::Named(keyboard::key::Named::ArrowRight) => {
                             shell.publish(Message::CursorMove(CursorMovement::Right));
                             return event::Status::Captured;
+                        }
+                        Key::Named(keyboard::key::Named::Enter) => {
+                            shell.publish(Message::InsertChar('\n'));
+                            return event::Status::Captured;
+                        }
+                        Key::Named(keyboard::key::Named::Tab) => {
+                            shell.publish(Message::InsertChar('\t'));
+                            return event::Status::Captured;
+                        }
+                        Key::Named(keyboard::key::Named::Space) => {
+                            shell.publish(Message::InsertChar(' '));
+                            return event::Status::Captured;
+                        }
+
+                        // Insert characters.
+                        Key::Character(_) => {
+                            if let Some(t) = text {
+                                if let Some(c) = t.chars().next() {
+                                    if !c.is_control() {
+                                        shell.publish(Message::InsertChar(c));
+                                        return event::Status::Captured;
+                                    }
+                                }
+                            }
                         }
 
                         // TODO: Handle more keys.

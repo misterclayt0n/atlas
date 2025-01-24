@@ -2,22 +2,18 @@ use iced::{widget::container, Element, Length, Point, Rectangle};
 
 use crate::{ui::editor::Editor, Message};
 
-use super::buffer::Buffer;
-
 /// Represents a view into a buffer.
 /// Manages viewport, scroll position, and cursor location for a specific buffer.
 pub struct Window {
-    pub buffer: Buffer,
     pub editor: Editor,
     pub _bounds: Rectangle,
     pub _scroll_offset: Point,
 }
 
 impl Window {
-    pub fn new(buffer: Buffer) -> Self {
+    pub fn new() -> Self {
         Self {
-            editor: Editor::new(buffer.clone()),
-            buffer,
+            editor: Editor::new(),
             _bounds: Rectangle::default(),
             _scroll_offset: Point::new(0.0, 0.0),
         }

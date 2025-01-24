@@ -9,6 +9,7 @@ mod ui;
 pub enum Message {
     TextInput(String),
     CursorMove(CursorMovement),
+    InsertChar(char),
 }
 
 #[derive(Debug, Clone)]
@@ -37,7 +38,7 @@ impl Default for Atlas {
 impl Atlas {
     /// Generates the window title based on the active buffer
     fn title(&self) -> String {
-        let buffer_name = &self.workspace.active_window().buffer.name;
+        let buffer_name = &self.workspace.active_window().editor.buffer.name;
 
         if buffer_name.is_empty() {
             return "Atlas".to_string();
@@ -51,13 +52,19 @@ impl Atlas {
         match message {
             Message::TextInput(text) => {
                 let window = self.workspace.active_window_mut();
-                window.buffer.content = text.into();
+                window.editor.buffer.content = text.into();
             }
             Message::CursorMove(movement) => {
                 self.workspace
                     .active_window_mut()
                     .editor_mut()
                     .move_cursor(movement);
+            }
+            Message::InsertChar(c) => {
+                let window = self.workspace.active_window_mut();
+                let pos = window.editor.cursor.position();
+                window.editor.buffer.insert_char(pos.offset, c);
+                window.editor_mut().move_cursor(CursorMovement::Right);
             }
         }
     }
