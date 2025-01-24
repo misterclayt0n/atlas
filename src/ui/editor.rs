@@ -41,7 +41,7 @@ impl Default for EditorState {
 impl Editor {
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
         let size: f32 = renderer.default_size().into();
-        return size; // Approximation for monospace
+        return size * 0.6; // Approximation for monospace
     }
 
     fn line_height(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {

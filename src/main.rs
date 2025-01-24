@@ -1,5 +1,5 @@
 use engine::workspace::Workspace;
-use iced::Element;
+use iced::{Element, Font};
 
 mod engine;
 mod ui;
@@ -54,7 +54,10 @@ impl Atlas {
                 window.buffer.content = text.into();
             }
             Message::CursorMove(movement) => {
-                self.workspace.active_window_mut().editor_mut().move_cursor(movement);
+                self.workspace
+                    .active_window_mut()
+                    .editor_mut()
+                    .move_cursor(movement);
             }
         }
     }
@@ -67,5 +70,5 @@ impl Atlas {
 }
 
 fn main() -> iced::Result {
-    iced::application(Atlas::title, Atlas::update, Atlas::view).run()
+    iced::application(Atlas::title, Atlas::update, Atlas::view).default_font(Font::MONOSPACE).run()
 }
