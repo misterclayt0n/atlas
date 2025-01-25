@@ -25,44 +25,6 @@ For development, you can use:
 cargo run
 ```
 
-## Overall Architecture
-- `Atlas`: Top-level application
-  - `Workspace`: Manages multiple windows
-    - `Window`: View into a buffer with position/scroll info
-      - `Buffer`: Actual text content
-      - `Editor`: Widget that renders the content
-
-## Roadmap / TODO
-
-Not ordered by priority.
-
-- [ ] **Basic text editing**: Implement fundamental text editing operations
-  - [x] Basic text display
-  - [ ] Text input handling
-  - [ ] Cursor movement
-  - [ ] Basic editing operations (insert, delete)
-- [ ] **Modal editing**:
-  - [ ] Basic mode switching (Normal/Insert)
-  - [ ] Command mode
-  - [ ] Visual mode
-- [ ] **Buffer Management**:
-  - [ ] Multiple buffers support
-  - [ ] Buffer switching
-  - [ ] File loading/saving
-- [ ] **UI Improvements**:
-  - [ ] Status line
-  - [ ] Line numbers
-  - [ ] Cursor visualization
-- [ ] **Advanced Features**:
-  - [ ] Syntax highlighting
-  - [ ] Search and replace
-  - [ ] Undo/Redo
-  - [ ] Split views
-- [ ] **Configuration**:
-  - [ ] Customizable keybindings
-  - [ ] Themes
-  - [ ] User configuration file
-
 ## Contributing
 
 Feel free to open an [issue](https://github.com/misterclayt0n/atlas/issues) or submit a pull request if you have ideas or bug fixes.

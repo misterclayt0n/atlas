@@ -1,3 +1,18 @@
+// TODO: Handle fonts a bit better.
+// TODO: Add vim mode.
+// TODO: Draw the cursor better - This means probably creating a separate independent widget for the cursor itself, not tying it to the editor.
+// TODO: File loading/saving
+// TODO: Command mode
+// TODO: Visual mode
+// TODO: Multiple buffer support - Buffer management
+// TODO: Status line
+// TODO: Line number
+// TODO: Syntax Highlighting
+// TODO: Split views
+// TODO: Multiple cursors - Helix/Zed style
+// TODO: LSP
+// TODO: Advanced vim features
+// TODO?: Completion engine
 use engine::workspace::Workspace;
 use iced::{Element, Font};
 
