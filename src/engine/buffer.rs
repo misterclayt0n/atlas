@@ -34,4 +34,24 @@ impl Buffer {
     pub fn insert_char(&mut self, offset: usize, c: char) {
         self.content.insert_char(offset, c)
     }
+
+    pub fn remove_char(&mut self, offset: usize) -> Option<char> {
+        if offset < self.content.len_chars() {
+            let c = self.content.char(offset);
+            self.content.remove(offset..offset + 1);
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    pub fn backspace(&mut self, offset: usize) -> Option<char> {
+        if offset > 0 {
+            let c = self.content.char(offset - 1);
+            self.content.remove(offset - 1..offset);
+            Some(c)
+        } else {
+            None
+        }
+    }
 }

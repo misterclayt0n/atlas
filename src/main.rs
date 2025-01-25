@@ -10,6 +10,8 @@ pub enum Message {
     TextInput(String),
     CursorMove(CursorMovement),
     InsertChar(char),
+    Backspace,
+    Delete, // Delete key
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +67,20 @@ impl Atlas {
                 let pos = window.editor.cursor.position();
                 window.editor.buffer.insert_char(pos.offset, c);
                 window.editor_mut().move_cursor(CursorMovement::Right);
+            }
+            Message::Backspace => {
+                let window = self.workspace.active_window_mut();
+                let pos = window.editor.cursor.position();
+                if pos.offset > 0 {
+                    window.editor.buffer.backspace(pos.offset);
+                    window.editor_mut().move_cursor(CursorMovement::Left);
+                }
+            }
+            Message::Delete => {
+                let window = self.workspace.active_window_mut();
+                let pos = window.editor.cursor.position();
+                window.editor.buffer.remove_char(pos.offset);
+                // Cursor stays in place for delete.
             }
         }
     }

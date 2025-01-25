@@ -23,7 +23,6 @@ pub struct Editor {
     pub cursor: Cursor,
 }
 
-// Add a small focus flag to your Editor's state
 #[derive(Debug)]
 struct EditorState {
     is_focused: bool,
@@ -38,7 +37,7 @@ impl Default for EditorState {
 impl Editor {
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
         let size: f32 = renderer.default_size().into();
-        return size * 0.6; // Approximation for monospace
+        return size * 0.6; // Approximation for monospace.
     }
 
     fn line_height(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
@@ -187,7 +186,7 @@ where
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) -> event::Status {
-        // Access our custom state
+        // Access our custom state.
         let editor_state = tree.state.downcast_mut::<EditorState>();
 
         match event {
@@ -235,19 +234,42 @@ where
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Space) => {
+                            // Handle dead keys here.
+                            // NOTE: This is the easiest way I've found to handle dead keys
+                            // There could exist some more elegant solution to this particular problem, but I'm too
+                            // lazy to find it, so we'll leave it like this for now.
+                            if let Some(dead_key) = text {
+                                for c in dead_key.chars() {
+                                    if !c.is_control() {
+                                        shell.publish(Message::InsertChar(c))
+                                    }
+                                }
+
+                                return event::Status::Captured;
+                            }
+
                             shell.publish(Message::InsertChar(' '));
+                            return event::Status::Captured;
+                        }
+                        Key::Named(keyboard::key::Named::Backspace) => {
+                            shell.publish(Message::Backspace);
+                            return event::Status::Captured;
+                        }
+                        Key::Named(keyboard::key::Named::Delete) => {
+                            shell.publish(Message::Delete);
                             return event::Status::Captured;
                         }
 
                         // Insert characters.
                         Key::Character(_) => {
-                            if let Some(t) = text {
-                                if let Some(c) = t.chars().next() {
+                            if let Some(composed) = text {
+                                // Insert each character from the final string
+                                for c in composed.chars() {
                                     if !c.is_control() {
                                         shell.publish(Message::InsertChar(c));
-                                        return event::Status::Captured;
                                     }
                                 }
+                                return event::Status::Captured;
                             }
                         }
 
