@@ -46,7 +46,8 @@ impl Buffer {
     }
 
     pub fn backspace(&mut self, offset: usize) -> Option<char> {
-        if offset > 0 {
+        // Only perform backspace if there is actually text and `offset` is in-bounds.
+        if offset > 0  && offset <= self.content.len_chars() {
             let c = self.content.char(offset - 1);
             self.content.remove(offset - 1..offset);
             Some(c)

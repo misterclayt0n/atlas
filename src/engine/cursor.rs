@@ -20,7 +20,7 @@ pub enum Cursor {
 }
 
 /// Represents a position in the text buffer.
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct TextPosition {
     pub line: usize,
     pub col: usize,
@@ -74,23 +74,14 @@ impl Cursor {
     // Movement
     //
 
-    pub fn move_left(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_left(&mut self, _buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
 
+        // Only allow movement within the current line.
         if current.col > 0 {
-            // Move left in the current line.
             Some(TextPosition::new(
                 current.line,
                 current.col - 1,
-                current.offset - 1,
-            ))
-        } else if current.line > 0 {
-            // Move to end of previous line.
-            // TODO: Remove this behavior.
-            let prev_line = buffer.content.line(current.line - 1);
-            Some(TextPosition::new(
-                current.line - 1,
-                prev_line.len_chars(),
                 current.offset - 1,
             ))
         } else {
@@ -102,20 +93,12 @@ impl Cursor {
         let current = self.position();
         let visual_len = buffer.visual_line_length(current.line);
 
+        // Only allow movement within the current line.
         if current.col < visual_len {
-            // Move right within the current line.
             Some(TextPosition::new(
                 current.line,
                 current.col + 1,
                 current.offset + 1,
-            ))
-        } else if current.line < buffer.content.len_lines() - 1 {
-            // Move to the start of next line.
-            // TODO: Remove this behavior.
-            Some(TextPosition::new(
-                current.line + 1,
-                0,
-                buffer.content.line_to_byte(current.line + 1),
             ))
         } else {
             None
@@ -164,6 +147,23 @@ impl Cursor {
         } else {
             None
         }
+    }
+
+    pub fn move_to_position(&mut self, position: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
+        // Directly set position with bound checking.
+        let clamped_line = position.line.min(buffer.content.len_lines().saturating_sub(1));
+        let line_len = buffer.visual_line_length(clamped_line);
+        let clamped_col = position.col.min(line_len);
+        let offset = buffer.content.line_to_char(clamped_line) + clamped_col;
+
+        let new_position = TextPosition::new(clamped_line, clamped_col, offset);
+
+        match self {
+            Cursor::Normal { position, .. } => *position = *position,
+            Cursor::Selection { active, .. } => *active = new_position,
+        }
+
+        Some(new_position)
     }
 
     //
