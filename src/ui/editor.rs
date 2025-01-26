@@ -72,9 +72,7 @@ impl Editor {
             CursorMovement::Right => self.cursor.move_right(&self.buffer),
             CursorMovement::Up => self.cursor.move_up(&self.buffer),
             CursorMovement::Down => self.cursor.move_down(&self.buffer),
-            CursorMovement::Position(position) => {
-                self.cursor.move_to_position(position, &self.buffer)
-            }
+            CursorMovement::Position(position) => self.cursor.move_to_position(position, &self.buffer),
         };
 
         if let Some(position) = new_position {
@@ -84,9 +82,14 @@ impl Editor {
                     preferred_column,
                 } => {
                     *pos = position;
-                    // Update preferred column for vertical movements.
-                    if matches!(movement, CursorMovement::Up | CursorMovement::Down) {
-                        *preferred_column = Some(position.col);
+                    // Only update `preferred_column` for horizontal moves or explicit positioning.
+                    match movement {
+                        CursorMovement::Left
+                        | CursorMovement::Right
+                        | CursorMovement::Position(_) => {
+                            *preferred_column = Some(position.col);
+                        }
+                        _ => {}
                     }
                 }
                 Cursor::Selection { active, .. } => {
@@ -257,22 +260,6 @@ where
             self.line_height(renderer),
             layout,
         );
-
-        // let cursor_bounds = Rectangle {
-        //     x: bounds.x + cursor_point.x,
-        //     y: bounds.y + cursor_point.y,
-        //     width: 2.0,
-        //     height: self.line_height(renderer),
-        // };
-
-        // renderer.fill_quad(
-        //     renderer::Quad {
-        //         bounds: cursor_bounds,
-        //         border: Border::default(),
-        //         shadow: Shadow::default(),
-        //     },
-        //     Color::WHITE,
-        // )
     }
 
     fn on_event(

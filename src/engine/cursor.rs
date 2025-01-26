@@ -108,13 +108,8 @@ impl Cursor {
     pub fn move_up(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
         if current.line > 0 {
-            let target_col = if let Some(preferred) = self.get_preferred_column() {
-                preferred
-            } else {
-                current.col
-            };
-
-            let prev_line_len = buffer.content.line(current.line - 1).len_chars();
+            let target_col = self.get_preferred_column().unwrap_or(current.col);
+            let prev_line_len = buffer.visual_line_length(current.line - 1);
             let new_col = target_col.min(prev_line_len);
 
             Some(TextPosition::new(
@@ -130,28 +125,29 @@ impl Cursor {
     pub fn move_down(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
         if current.line < buffer.content.len_lines() - 1 {
-            let target_col = if let Some(preferred) = self.get_preferred_column() {
-                preferred
-            } else {
-                current.col
-            };
-
-            let next_line_len = buffer.content.line(current.line + 1).len_chars();
+            let target_col = self.get_preferred_column().unwrap_or(current.col);
+            let next_line_len = buffer.visual_line_length(current.line + 1);
             let new_col = target_col.min(next_line_len);
 
             Some(TextPosition::new(
                 current.line + 1,
                 new_col,
-                buffer.content.line_to_byte(current.line + 1) + new_col,
+                self.calculate_offset(current.line + 1, new_col, buffer)
             ))
         } else {
             None
         }
     }
 
-    pub fn move_to_position(&mut self, position: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_to_position(
+        &mut self,
+        position: TextPosition,
+        buffer: &Buffer,
+    ) -> Option<TextPosition> {
         // Directly set position with bound checking.
-        let clamped_line = position.line.min(buffer.content.len_lines().saturating_sub(1));
+        let clamped_line = position
+            .line
+            .min(buffer.content.len_lines().saturating_sub(1));
         let line_len = buffer.visual_line_length(clamped_line);
         let clamped_col = position.col.min(line_len);
         let offset = buffer.content.line_to_char(clamped_line) + clamped_col;
@@ -159,8 +155,16 @@ impl Cursor {
         let new_position = TextPosition::new(clamped_line, clamped_col, offset);
 
         match self {
-            Cursor::Normal { position, .. } => *position = *position,
-            Cursor::Selection { active, .. } => *active = new_position,
+            Cursor::Normal {
+                position: pos,
+                preferred_column,
+            } => {
+                *pos = new_position;
+                *preferred_column = Some(new_position.col); // Update preferred column
+            }
+            Cursor::Selection { active, .. } => {
+                *active = new_position;
+            }
         }
 
         Some(new_position)

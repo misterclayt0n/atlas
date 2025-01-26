@@ -1,5 +1,4 @@
 // TODO: Handle fonts a bit better.
-// TODO: Maintain Y position when X position is handled (preffered_col or something).
 // TODO: Add vim mode.
 // TODO: Draw the cursor better - This means probably creating a separate independent widget for the cursor itself, not tying it to the editor.
 // TODO: File loading/saving.
@@ -98,7 +97,7 @@ impl Atlas {
                             TextPosition::new(pos.line - 1, prev_line_length, pos.offset - 1),
                         ));
                     } else {
-                        // Normal backspace behavior
+                        // Normal backspace behavior.
                         window.editor.buffer.backspace(pos.offset);
                         window.editor_mut().move_cursor(CursorMovement::Left)
                     }
