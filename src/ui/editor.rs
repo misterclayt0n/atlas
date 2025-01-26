@@ -60,9 +60,9 @@ impl Editor {
 
     pub fn new() -> Self {
         Self {
-            buffer: Buffer::new("Amazing", "Yes"),
+            buffer: Buffer::new("", "Atlas"),
             cursor: Cursor::new(),
-            mode: EditorMode::Insert,
+            mode: EditorMode::Normal,
         }
     }
 
@@ -72,10 +72,26 @@ impl Editor {
             CursorMovement::Right => self.cursor.move_right(&self.buffer),
             CursorMovement::Up => self.cursor.move_up(&self.buffer),
             CursorMovement::Down => self.cursor.move_down(&self.buffer),
-            CursorMovement::Position(position) => self.cursor.move_to_position(position, &self.buffer),
+            CursorMovement::Position(position) => {
+                self.cursor.move_to_position(position, &self.buffer)
+            }
         };
 
         if let Some(position) = new_position {
+            assert!(
+                position.line < self.buffer.content.len_lines(),
+                "Cursor line overflow: {} >= {}",
+                position.line,
+                self.buffer.content.len_lines()
+            );
+
+            assert!(
+                position.offset <= self.buffer.content.len_chars(),
+                "Cursor offset overflow: {} > {}",
+                position.offset,
+                self.buffer.content.len_chars()
+            );
+
             match &mut self.cursor {
                 Cursor::Normal {
                     position: pos,

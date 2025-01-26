@@ -22,10 +22,24 @@ impl Workspace {
     }
 
     pub fn active_window(&self) -> &Window {
+        assert!(
+            self.active_window < self.windows.len(),
+            "Active window index is out of bounds: {} >= {}",
+            self.active_window,
+            self.windows.len()
+        );
+
         &self.windows[self.active_window]
     }
 
     pub fn active_window_mut(&mut self) -> &mut Window {
+        assert!(
+            self.active_window < self.windows.len(),
+            "Active window index is out of bounds: {} >= {}",
+            self.active_window,
+            self.windows.len()
+        );
+
         &mut self.windows[self.active_window]
     }
 

@@ -1,6 +1,6 @@
 // TODO: Handle fonts a bit better.
 // TODO: Add vim mode.
-// TODO: Draw the cursor better - This means probably creating a separate independent widget for the cursor itself, not tying it to the editor.
+// TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
 // TODO: Command mode.
 // TODO: Visual mode.

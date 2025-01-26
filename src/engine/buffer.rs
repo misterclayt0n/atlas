@@ -32,27 +32,44 @@ impl Buffer {
     }
 
     pub fn insert_char(&mut self, offset: usize, c: char) {
+        assert!(
+            offset <= self.content.len_chars(),
+            "Insert out of bounds: {} > {}",
+            offset,
+            self.content.len_chars()
+        );
+
         self.content.insert_char(offset, c)
     }
 
     pub fn remove_char(&mut self, offset: usize) -> Option<char> {
-        if offset < self.content.len_chars() {
-            let c = self.content.char(offset);
-            self.content.remove(offset..offset + 1);
-            Some(c)
-        } else {
-            None
+        if offset >= self.content.len_chars() {
+            return None;
         }
+
+        assert!(
+            self.content.len_chars() > 0,
+            "Trying to remove from empty buffer"
+        );
+
+        let c = self.content.char(offset);
+        self.content.remove(offset..offset + 1);
+        Some(c)
     }
 
     pub fn backspace(&mut self, offset: usize) -> Option<char> {
-        // Only perform backspace if there is actually text and `offset` is in-bounds.
-        if offset > 0  && offset <= self.content.len_chars() {
-            let c = self.content.char(offset - 1);
-            self.content.remove(offset - 1..offset);
-            Some(c)
-        } else {
-            None
+        if offset == 0 && offset >= self.content.len_chars() {
+            return None;
         }
+
+        assert!(
+            self.content.len_chars() > 0,
+            "Trying to remove from empty buffer"
+        );
+
+        // Only perform backspace if there is actually text and `offset` is in-bounds.
+        let c = self.content.char(offset - 1);
+        self.content.remove(offset - 1..offset);
+        Some(c)
     }
 }

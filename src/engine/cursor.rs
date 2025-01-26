@@ -24,7 +24,7 @@ pub enum Cursor {
 pub struct TextPosition {
     pub line: usize,
     pub col: usize,
-    pub offset: usize, // Linear position in the buffer.
+    pub offset: usize, // Linear position in the buffer (character count from start).
 }
 
 impl Cursor {
@@ -77,66 +77,102 @@ impl Cursor {
     pub fn move_left(&mut self, _buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
 
-        // Only allow movement within the current line.
-        if current.col > 0 {
-            Some(TextPosition::new(
-                current.line,
-                current.col - 1,
-                current.offset - 1,
-            ))
-        } else {
-            None
+        // Do not perform any movement to the left if we're at the beginning of the line.
+        if current.col == 0 {
+            return None;
         }
+
+        assert!(
+            current.offset > 0,
+            "Cursor offset underflow: {} (line: {}, col: {})",
+            current.offset,
+            current.line,
+            current.col
+        );
+
+        Some(TextPosition::new(
+            current.line,
+            current.col - 1,
+            current.offset - 1,
+        ))
     }
 
     pub fn move_right(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
         let visual_len = buffer.visual_line_length(current.line);
 
-        // Only allow movement within the current line.
-        if current.col < visual_len {
-            Some(TextPosition::new(
-                current.line,
-                current.col + 1,
-                current.offset + 1,
-            ))
-        } else {
-            None
+        // Do not move right if we're at the end of the buffer in the X axis.
+        if current.col >= visual_len {
+            return None;
         }
+
+        assert!(
+            current.offset < buffer.content.len_chars(),
+            "Offset overflow: {} >= {}",
+            current.offset,
+            buffer.content.len_chars()
+        );
+
+        Some(TextPosition::new(
+            current.line,
+            current.col + 1,
+            current.offset + 1,
+        ))
     }
 
     pub fn move_up(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
-        if current.line > 0 {
-            let target_col = self.get_preferred_column().unwrap_or(current.col);
-            let prev_line_len = buffer.visual_line_length(current.line - 1);
-            let new_col = target_col.min(prev_line_len);
 
-            Some(TextPosition::new(
-                current.line - 1,
-                new_col,
-                self.calculate_offset(current.line - 1, new_col, buffer),
-            ))
-        } else {
-            None
+        // Do not move up if we're at line 0.
+        if current.line == 0 {
+            return None;
         }
+
+        let target_col = self.get_preferred_column().unwrap_or(current.col);
+        let prev_line_len = buffer.visual_line_length(current.line - 1);
+        let new_col = target_col.min(prev_line_len);
+
+        let new_pos = TextPosition::new(
+            current.line - 1,
+            new_col,
+            self.calculate_offset(current.line - 1, new_col, buffer),
+        );
+
+        assert!(
+            new_pos.col <= prev_line_len,
+            "Invalid column {} after vertical move (line_length: {})",
+            new_pos.col,
+            prev_line_len
+        );
+
+        Some(new_pos)
     }
 
     pub fn move_down(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let current = self.position();
-        if current.line < buffer.content.len_lines() - 1 {
-            let target_col = self.get_preferred_column().unwrap_or(current.col);
-            let next_line_len = buffer.visual_line_length(current.line + 1);
-            let new_col = target_col.min(next_line_len);
 
-            Some(TextPosition::new(
-                current.line + 1,
-                new_col,
-                self.calculate_offset(current.line + 1, new_col, buffer)
-            ))
-        } else {
-            None
+        if current.line >= buffer.content.len_lines() - 1 {
+            return None;
         }
+
+        let target_col = self.get_preferred_column().unwrap_or(current.col);
+        let next_line_len = buffer.visual_line_length(current.line + 1);
+        let new_col = target_col.min(next_line_len);
+
+        let new_pos = TextPosition::new(
+            current.line + 1,
+            new_col,
+            self.calculate_offset(current.line + 1, new_col, buffer),
+        );
+
+        assert!(
+            new_pos.line < buffer.content.len_lines(),
+            "Line overflow after move: {} >= {}",
+            new_pos.line,
+            buffer.content.len_lines()
+        );
+
+        Some(new_pos)
     }
 
     pub fn move_to_position(
