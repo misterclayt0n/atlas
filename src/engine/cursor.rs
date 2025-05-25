@@ -13,7 +13,7 @@ pub enum Cursor {
     },
 
     /// Text selection with start and end positions.
-    Selection {
+    _Selection {
         anchor: TextPosition, // Where it starts.
         active: TextPosition, // Where it is currently.
     },
@@ -40,7 +40,7 @@ impl Cursor {
     pub fn position(&self) -> TextPosition {
         match self {
             Self::Normal { position, .. } => *position,
-            Self::Selection { active, .. } => *active,
+            Self::_Selection { active, .. } => *active,
         }
     }
 
@@ -50,19 +50,19 @@ impl Cursor {
         Point::new(pos.col as f32 * char_width, pos.line as f32 * line_height)
     }
 
-    /// Start selection from current position
-    pub fn start_selection(&mut self) {
+    /// Start selection from current position.
+    pub fn _start_selection(&mut self) {
         if let Self::Normal { position, .. } = *self {
-            *self = Self::Selection {
+            *self = Self::_Selection {
                 anchor: position,
                 active: position,
             };
         }
     }
 
-    /// Clear any active selection
-    pub fn clear_selection(&mut self) {
-        if let Self::Selection { active, .. } = *self {
+    /// Clear any active selection.
+    pub fn _clear_selection(&mut self) {
+        if let Self::_Selection { active, .. } = *self {
             *self = Self::Normal {
                 position: active,
                 preferred_column: None,
@@ -198,7 +198,7 @@ impl Cursor {
                 *pos = new_position;
                 *preferred_column = Some(new_position.col); // Update preferred column
             }
-            Cursor::Selection { active, .. } => {
+            Cursor::_Selection { active, .. } => {
                 *active = new_position;
             }
         }

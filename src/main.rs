@@ -1,4 +1,4 @@
-// TODO: Handle fonts a bit better.
+// TODO: Iterate by graphemes instead of bytes.
 // TODO: Add vim mode.
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
@@ -14,7 +14,7 @@
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
 use engine::{cursor::TextPosition, workspace::Workspace};
-use iced::{Element, Font};
+use iced::Element;
 
 mod engine;
 mod ui;
@@ -119,8 +119,20 @@ impl Atlas {
     }
 }
 
+pub struct Iosevka;
+
+impl Iosevka {
+	pub const REGULAR: iced::Font = iced::Font {
+		style: iced::font::Style::Normal,
+		family: iced::font::Family::Name("Iosevka"),
+		stretch: iced::font::Stretch::Normal,
+		weight: iced::font::Weight::Normal,
+	};
+}
+
 fn main() -> iced::Result {
     iced::application(Atlas::title, Atlas::update, Atlas::view)
-        .default_font(Font::MONOSPACE)
+    	.font(include_bytes!("../fonts/iosevka-regular.ttf"))
+        .default_font(Iosevka::REGULAR)
         .run()
 }

@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.13.1", features = ["canvas", "debug", "advanced"]}
+iced_graphics = "0.13"
 ropey = "1.6.1"

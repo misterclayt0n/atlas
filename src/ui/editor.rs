@@ -2,20 +2,23 @@ use iced::{
     advanced::{
         graphics::core::{event, widget},
         layout, mouse, renderer,
+        text::Paragraph as _,
         widget::Tree,
         Clipboard, Layout, Shell, Text, Widget,
     },
     alignment,
     keyboard::{self, Key},
+    widget::span,
     Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
 };
+use iced_graphics::text::Paragraph;
 
 use crate::{
     engine::{
         buffer::Buffer,
         cursor::{Cursor, TextPosition},
     },
-    CursorMovement, Message,
+    CursorMovement, Iosevka, Message,
 };
 
 /// Custom widget that handles the visual representation of text content.
@@ -49,8 +52,42 @@ impl Default for EditorState {
 
 impl Editor {
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
+        // Create a paragraph with a single character to get precise width.
+        // NOTE: We probably need to cache this.
+        let bounds = Size::new(1000.0, 100.0);
+        let paragraph = self.create_paragraph("M", bounds, renderer);
+
+        if let Some(run) = paragraph.buffer().layout_runs().next() {
+            if let Some(glyph) = run.glyphs.first() {
+                return glyph.w;
+            }
+        }
+
+        // Fallback.
+        println!("Got to fallback");
         let size: f32 = renderer.default_size().into();
-        return size * 0.6; // Approximation for monospace.
+        size * 0.6
+    }
+
+    pub fn create_paragraph(
+        &self,
+        content: &str,
+        bounds: iced::Size,
+        renderer: &impl iced::advanced::text::Renderer,
+    ) -> Paragraph {
+        let font_size: f32 = renderer.default_size().into();
+
+        iced_graphics::text::Paragraph::with_spans::<()>(iced::advanced::text::Text {
+            bounds,
+            content: &[span(content).to_static()],
+            size: font_size.into(), // Use renderer font size.
+            shaping: iced::advanced::text::Shaping::Basic,
+            wrapping: iced::advanced::text::Wrapping::None,
+            horizontal_alignment: iced::alignment::Horizontal::Left,
+            vertical_alignment: iced::alignment::Vertical::Top,
+            line_height: iced::widget::text::LineHeight::Relative(1.2),
+            font: Iosevka::REGULAR,
+        })
     }
 
     fn line_height(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
@@ -108,7 +145,7 @@ impl Editor {
                         _ => {}
                     }
                 }
-                Cursor::Selection { active, .. } => {
+                Cursor::_Selection { active, .. } => {
                     *active = position;
                 }
             }
