@@ -5,11 +5,7 @@ use iced::{
         text::Paragraph as _,
         widget::Tree,
         Clipboard, Layout, Shell, Text, Widget,
-    },
-    alignment,
-    keyboard::{self, Key},
-    widget::span,
-    Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
+    }, alignment, keyboard::{self, Key}, widget::span, Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme
 };
 use iced_graphics::text::Paragraph;
 
@@ -18,7 +14,7 @@ use crate::{
         buffer::Buffer,
         cursor::{Cursor, TextPosition},
     },
-    CursorMovement, Iosevka, Message,
+    CursorMovement, Message,
 };
 
 /// Custom widget that handles the visual representation of text content.
@@ -33,6 +29,7 @@ pub struct Editor {
 #[derive(Debug)]
 struct EditorState {
     is_focused: bool,
+    cached_char_width: Option<f32>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -46,15 +43,18 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             is_focused: true, // This is for coding experience.
+            cached_char_width: None,
         }
     }
 }
 
 impl Editor {
-    fn char_width(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
+    fn char_width(&self, renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>) -> f32 {
         // Create a paragraph with a single character to get precise width.
         // NOTE: We probably need to cache this.
         let bounds = Size::new(1000.0, 100.0);
+        
+        // We assume all characters have the same width, hence only monospaced fonts work.
         let paragraph = self.create_paragraph("M", bounds, renderer);
 
         if let Some(run) = paragraph.buffer().layout_runs().next() {
@@ -73,7 +73,7 @@ impl Editor {
         &self,
         content: &str,
         bounds: iced::Size,
-        renderer: &impl iced::advanced::text::Renderer,
+        renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>,
     ) -> Paragraph {
         let font_size: f32 = renderer.default_size().into();
 
@@ -86,7 +86,7 @@ impl Editor {
             horizontal_alignment: iced::alignment::Horizontal::Left,
             vertical_alignment: iced::alignment::Vertical::Top,
             line_height: iced::widget::text::LineHeight::Relative(1.2),
-            font: Iosevka::REGULAR,
+            font: renderer.default_font(),
         })
     }
 
@@ -230,7 +230,7 @@ impl Editor {
 
 impl<Theme, Renderer> Widget<Message, Theme, Renderer> for Editor
 where
-    Renderer: renderer::Renderer + iced::advanced::text::Renderer, // This is used to render some text.
+    Renderer: renderer::Renderer + iced::advanced::text::Renderer<Font = iced::Font>, // This is used to render some text.
     Message:,
 {
     fn tag(&self) -> widget::tree::Tag {
@@ -247,18 +247,22 @@ where
 
     fn layout(
         &self,
-        _tree: &mut iced::advanced::widget::Tree,
-        _renderer: &Renderer,
+        tree: &mut iced::advanced::widget::Tree,
+        renderer: &Renderer,
         limits: &iced::advanced::layout::Limits,
     ) -> iced::advanced::layout::Node {
-        // Create a simple layout node that fills the available space.
-        let size = limits.max();
-        layout::Node::new(size)
+        let state = tree.state.downcast_mut::<EditorState>();
+
+        if state.cached_char_width.is_none() {
+            state.cached_char_width = Some(self.char_width(renderer));
+        }
+
+        layout::Node::new(limits.max())
     }
 
     fn draw(
         &self,
-        _tree: &iced::advanced::widget::Tree,
+        tree: &iced::advanced::widget::Tree,
         renderer: &mut Renderer,
         _theme: &Theme,
         _style: &renderer::Style,
@@ -268,6 +272,8 @@ where
     ) {
         let bounds = layout.bounds();
         let content = self.buffer.content.to_string();
+        let state = tree.state.downcast_ref::<EditorState>();
+        let char_w = state.cached_char_width.unwrap_or_else(|| self.char_width(renderer));
 
         // Draw background.
         renderer.fill_quad(
@@ -304,12 +310,12 @@ where
         // Draw cursor.
         let cursor_point = self
             .cursor
-            .to_point(self.char_width(renderer), self.line_height(renderer));
+            .to_point(char_w, self.line_height(renderer));
 
         self.draw_cursor(
             renderer,
             cursor_point,
-            self.char_width(renderer),
+            char_w,
             self.line_height(renderer),
             layout,
         );

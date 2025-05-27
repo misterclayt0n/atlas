@@ -14,7 +14,7 @@
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
 use engine::{cursor::TextPosition, workspace::Workspace};
-use iced::Element;
+use iced::{Element, Font};
 
 mod engine;
 mod ui;
