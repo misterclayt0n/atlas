@@ -336,7 +336,6 @@ where
         let editor_state = tree.state.downcast_mut::<EditorState>();
 
         match event {
-            // 1) Mouse: handle focus/unfocus.
             Event::Mouse(mouse_event) => match mouse_event {
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     // If clicked inside our widget, focus. Otherwise, unfocus.
@@ -350,7 +349,6 @@ where
                 _ => {}
             },
 
-            // 2) Keyboard input.
             Event::Keyboard(keyboard::Event::KeyPressed { key, text, modifiers, .. }) => {
                 // Only capture if we are focused.
                 if editor_state.is_focused {

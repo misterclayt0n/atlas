@@ -83,7 +83,8 @@ impl Cursor {
         let new_col = cur.col - 1;
         let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
         let new_pos = TextPosition::new(cur.line, new_col, new_off);
-        self.set_position(new_pos);
+
+        self.set_position(new_pos, true);
 
         Some(new_pos)
     }
@@ -97,7 +98,8 @@ impl Cursor {
         let new_col = cur.col + 1;
         let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
         let new_pos = TextPosition::new(cur.line, new_col, new_off);
-        self.set_position(new_pos);
+
+        self.set_position(new_pos, true);
 
         Some(new_pos)
     }
@@ -112,7 +114,8 @@ impl Cursor {
         let new_col = target_col.min(buffer.grapheme_len(cur.line - 1));
         let new_off = buffer.grapheme_col_to_offset(cur.line - 1, new_col);
         let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
-        self.set_position(new_pos);
+
+        self.set_position(new_pos, false);
 
         Some(new_pos)
     }
@@ -127,17 +130,25 @@ impl Cursor {
         let new_col = target_col.min(buffer.grapheme_len(cur.line + 1));
         let new_off = buffer.grapheme_col_to_offset(cur.line + 1, new_col);
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
-        self.set_position(new_pos);
+        self.set_position(new_pos, false);
 
         Some(new_pos)
     }
 
     pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
+        assert!(
+            pos.line < buffer.content.len_lines(),
+            "Line index out of bounds: {} >= {}",
+            pos.line,
+            buffer.content.len_lines()
+        );
+
         let line = pos.line.min(buffer.content.len_lines().saturating_sub(1));
         let col = pos.col.min(buffer.grapheme_len(line));
         let off = buffer.grapheme_col_to_offset(line, col);
         let new_pos = TextPosition::new(line, col, off);
-        self.set_position(new_pos);
+
+        self.set_position(new_pos, true);
 
         Some(new_pos)
     }
@@ -146,14 +157,16 @@ impl Cursor {
     // Helpers
     //
 
-    fn set_position(&mut self, pos: TextPosition) {
+    fn set_position(&mut self, pos: TextPosition, update_preferred_col: bool) {
         match self {
             Self::Normal {
                 position,
                 preferred_column,
             } => {
                 *position = pos;
-                *preferred_column = Some(pos.col);
+                if update_preferred_col {
+                    *preferred_column = Some(pos.col)
+                }
             }
             Self::_Selection { active, .. } => *active = pos,
         }

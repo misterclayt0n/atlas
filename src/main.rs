@@ -13,7 +13,6 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
-// FIX: Desired col not working.
 
 use engine::{cursor::TextPosition, workspace::Workspace};
 use iced::Element;

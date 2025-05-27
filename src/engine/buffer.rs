@@ -68,7 +68,7 @@ impl Buffer {
 
     /// Given a char offset, return the previous grapheme boundary.
     pub fn prev_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(offset <= self.content.len_chars());
+        assert!(offset <= self.content.len_chars(), "Offset {offset} exceeds content length");
 
         if offset == 0 {
             return 0;
@@ -86,7 +86,7 @@ impl Buffer {
 
     /// Next boundary.
     pub fn next_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(offset <= self.content.len_chars());
+        assert!(offset <= self.content.len_chars(), "Offset {offset} exceeds content length");
 
         let total = self.content.len_chars();
         if offset >= total {
