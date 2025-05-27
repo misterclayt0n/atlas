@@ -19,12 +19,15 @@ impl Buffer {
     }
 
     pub fn visible_line_content(&self, line: usize) -> String {
-        let line_content = self.content.line(line);
-        let content_str = line_content.to_string();
+        assert!(
+            line < self.content.len_lines(),
+            "Line index out of range ({line})"
+        );
 
-        content_str
-            .trim_end_matches('\r')
-            .trim_end_matches('\n')
+        self.content
+            .line(line)
+            .to_string()
+            .trim_end_matches(['\r', '\n'])
             .to_string()
     }
 
@@ -40,6 +43,16 @@ impl Buffer {
     /// Translate (line, grapheme column) to absolute char offset.
     /// Used by the cursor when it needs the real Rope effect.
     pub fn grapheme_col_to_offset(&self, line: usize, col: usize) -> usize {
+        assert!(
+            line < self.content.len_lines(),
+            "Line index out of range ({line})"
+        );
+
+        assert!(
+            col <= self.grapheme_len(line),
+            "Column {col} exceeds grapheme_len(line)"
+        );
+
         let mut chars = 0;
 
         for (i, g) in self.visible_line_content(line).graphemes(true).enumerate() {
@@ -55,6 +68,8 @@ impl Buffer {
 
     /// Given a char offset, return the previous grapheme boundary.
     pub fn prev_grapheme_offset(&self, offset: usize) -> usize {
+        assert!(offset <= self.content.len_chars());
+
         if offset == 0 {
             return 0;
         }
@@ -71,6 +86,8 @@ impl Buffer {
 
     /// Next boundary.
     pub fn next_grapheme_offset(&self, offset: usize) -> usize {
+        assert!(offset <= self.content.len_chars());
+
         let total = self.content.len_chars();
         if offset >= total {
             return total;
@@ -85,7 +102,8 @@ impl Buffer {
             .map(|(b, _)| b)
             .unwrap_or(slice.len());
 
-        self.content.byte_to_char(start_byte + next_byte_off_in_slice)
+        self.content
+            .byte_to_char(start_byte + next_byte_off_in_slice)
     }
 
     pub fn insert_char(&mut self, offset: usize, c: char) {
@@ -100,11 +118,25 @@ impl Buffer {
     }
 
     pub fn delete(&mut self, offset: usize) {
+        assert!(
+            offset <= self.content.len_chars(),
+            "Insert out of bounds: {} > {}",
+            offset,
+            self.content.len_chars()
+        );
+
         let end = self.next_grapheme_offset(offset);
         self.content.remove(offset..end);
     }
 
     pub fn backspace(&mut self, offset: usize) {
+        assert!(
+            offset <= self.content.len_chars(),
+            "Insert out of bounds: {} > {}",
+            offset,
+            self.content.len_chars()
+        );
+
         if offset == 0 {
             return;
         }
