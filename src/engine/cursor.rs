@@ -74,153 +74,98 @@ impl Cursor {
     // Movement
     //
 
-    pub fn move_left(&mut self, _buffer: &Buffer) -> Option<TextPosition> {
-        let current = self.position();
-
-        // Do not perform any movement to the left if we're at the beginning of the line.
-        if current.col == 0 {
+    pub fn move_left(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+        let cur = self.position();
+        if cur.col == 0 {
             return None;
         }
 
-        assert!(
-            current.offset > 0,
-            "Cursor offset underflow: {} (line: {}, col: {})",
-            current.offset,
-            current.line,
-            current.col
-        );
+        let new_col = cur.col - 1;
+        let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
+        let new_pos = TextPosition::new(cur.line, new_col, new_off);
+        self.set_position(new_pos);
 
-        Some(TextPosition::new(
-            current.line,
-            current.col - 1,
-            current.offset - 1,
-        ))
+        Some(new_pos)
     }
 
     pub fn move_right(&mut self, buffer: &Buffer) -> Option<TextPosition> {
-        let current = self.position();
-        let visual_len = buffer.visual_line_length(current.line);
-
-        // Do not move right if we're at the end of the buffer in the X axis.
-        if current.col >= visual_len {
+        let cur = self.position();
+        if cur.col >= buffer.grapheme_len(cur.line) {
             return None;
         }
 
-        assert!(
-            current.offset < buffer.content.len_chars(),
-            "Offset overflow: {} >= {}",
-            current.offset,
-            buffer.content.len_chars()
-        );
+        let new_col = cur.col + 1;
+        let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
+        let new_pos = TextPosition::new(cur.line, new_col, new_off);
+        self.set_position(new_pos);
 
-        Some(TextPosition::new(
-            current.line,
-            current.col + 1,
-            current.offset + 1,
-        ))
+        Some(new_pos)
     }
 
     pub fn move_up(&mut self, buffer: &Buffer) -> Option<TextPosition> {
-        let current = self.position();
-
-        // Do not move up if we're at line 0.
-        if current.line == 0 {
+        let cur = self.position();
+        if cur.line == 0 {
             return None;
         }
 
-        let target_col = self.get_preferred_column().unwrap_or(current.col);
-        let prev_line_len = buffer.visual_line_length(current.line - 1);
-        let new_col = target_col.min(prev_line_len);
-
-        let new_pos = TextPosition::new(
-            current.line - 1,
-            new_col,
-            self.calculate_offset(current.line - 1, new_col, buffer),
-        );
-
-        assert!(
-            new_pos.col <= prev_line_len,
-            "Invalid column {} after vertical move (line_length: {})",
-            new_pos.col,
-            prev_line_len
-        );
+        let target_col = self.get_preferred_column().unwrap_or(cur.col);
+        let new_col = target_col.min(buffer.grapheme_len(cur.line - 1));
+        let new_off = buffer.grapheme_col_to_offset(cur.line - 1, new_col);
+        let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
+        self.set_position(new_pos);
 
         Some(new_pos)
     }
 
     pub fn move_down(&mut self, buffer: &Buffer) -> Option<TextPosition> {
-        let current = self.position();
-
-        if current.line >= buffer.content.len_lines() - 1 {
+        let cur = self.position();
+        if cur.line + 1 >= buffer.content.len_lines() {
             return None;
         }
 
-        let target_col = self.get_preferred_column().unwrap_or(current.col);
-        let next_line_len = buffer.visual_line_length(current.line + 1);
-        let new_col = target_col.min(next_line_len);
-
-        let new_pos = TextPosition::new(
-            current.line + 1,
-            new_col,
-            self.calculate_offset(current.line + 1, new_col, buffer),
-        );
-
-        assert!(
-            new_pos.line < buffer.content.len_lines(),
-            "Line overflow after move: {} >= {}",
-            new_pos.line,
-            buffer.content.len_lines()
-        );
+        let target_col = self.get_preferred_column().unwrap_or(cur.col);
+        let new_col = target_col.min(buffer.grapheme_len(cur.line + 1));
+        let new_off = buffer.grapheme_col_to_offset(cur.line + 1, new_col);
+        let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
+        self.set_position(new_pos);
 
         Some(new_pos)
     }
 
-    pub fn move_to_position(
-        &mut self,
-        position: TextPosition,
-        buffer: &Buffer,
-    ) -> Option<TextPosition> {
-        // Directly set position with bound checking.
-        let clamped_line = position
-            .line
-            .min(buffer.content.len_lines().saturating_sub(1));
-        let line_len = buffer.visual_line_length(clamped_line);
-        let clamped_col = position.col.min(line_len);
-        let offset = buffer.content.line_to_char(clamped_line) + clamped_col;
+    pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
+        let line = pos.line.min(buffer.content.len_lines().saturating_sub(1));
+        let col = pos.col.min(buffer.grapheme_len(line));
+        let off = buffer.grapheme_col_to_offset(line, col);
+        let new_pos = TextPosition::new(line, col, off);
+        self.set_position(new_pos);
 
-        let new_position = TextPosition::new(clamped_line, clamped_col, offset);
-
-        match self {
-            Cursor::Normal {
-                position: pos,
-                preferred_column,
-            } => {
-                *pos = new_position;
-                *preferred_column = Some(new_position.col); // Update preferred column
-            }
-            Cursor::_Selection { active, .. } => {
-                *active = new_position;
-            }
-        }
-
-        Some(new_position)
+        Some(new_pos)
     }
 
     //
     // Helpers
     //
 
+    fn set_position(&mut self, pos: TextPosition) {
+        match self {
+            Self::Normal {
+                position,
+                preferred_column,
+            } => {
+                *position = pos;
+                *preferred_column = Some(pos.col);
+            }
+            Self::_Selection { active, .. } => *active = pos,
+        }
+    }
+
     fn get_preferred_column(&self) -> Option<usize> {
-        match &self {
-            Cursor::Normal {
+        match self {
+            Self::Normal {
                 preferred_column, ..
             } => *preferred_column,
             _ => None,
         }
-    }
-
-    fn calculate_offset(&self, line: usize, col: usize, buffer: &Buffer) -> usize {
-        buffer.content.line_to_byte(line) + col
     }
 }
 

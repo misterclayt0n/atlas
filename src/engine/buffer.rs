@@ -1,4 +1,5 @@
 use ropey::Rope;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Represents a text buffer in the editor.
 /// Handles the actual content storage and text manipulation operations.
@@ -31,6 +32,62 @@ impl Buffer {
         self.visible_line_content(line).chars().count()
     }
 
+    /// Number of grapheme clusters in the visible part of 'line'.
+    pub fn grapheme_len(&self, line: usize) -> usize {
+        self.visible_line_content(line).graphemes(true).count()
+    }
+
+    /// Translate (line, grapheme column) to absolute char offset.
+    /// Used by the cursor when it needs the real Rope effect.
+    pub fn grapheme_col_to_offset(&self, line: usize, col: usize) -> usize {
+        let mut chars = 0;
+
+        for (i, g) in self.visible_line_content(line).graphemes(true).enumerate() {
+            if i == col {
+                break;
+            }
+
+            chars += g.chars().count();
+        }
+
+        self.content.line_to_char(line) + chars
+    }
+
+    /// Given a char offset, return the previous grapheme boundary.
+    pub fn prev_grapheme_offset(&self, offset: usize) -> usize {
+        if offset == 0 {
+            return 0;
+        }
+
+        // REFACTOR: Avoid using to_string(), too many allocations here.
+        let slice = self.content.slice(..offset).to_string(); // Small: Only <= line.
+        let mut last = 0;
+        for (b, _) in slice.grapheme_indices(true) {
+            last = b;
+        }
+
+        self.content.byte_to_char(last)
+    }
+
+    /// Next boundary.
+    pub fn next_grapheme_offset(&self, offset: usize) -> usize {
+        let total = self.content.len_chars();
+        if offset >= total {
+            return total;
+        }
+
+        let start_byte = self.content.char_to_byte(offset);
+        let slice = self.content.slice(offset..).to_string();
+
+        let next_byte_off_in_slice = slice
+            .grapheme_indices(true)
+            .nth(1)
+            .map(|(b, _)| b)
+            .unwrap_or(slice.len());
+
+        self.content.byte_to_char(start_byte + next_byte_off_in_slice)
+    }
+
     pub fn insert_char(&mut self, offset: usize, c: char) {
         assert!(
             offset <= self.content.len_chars(),
@@ -42,34 +99,17 @@ impl Buffer {
         self.content.insert_char(offset, c)
     }
 
-    pub fn remove_char(&mut self, offset: usize) -> Option<char> {
-        if offset >= self.content.len_chars() {
-            return None;
-        }
-
-        assert!(
-            self.content.len_chars() > 0,
-            "Trying to remove from empty buffer"
-        );
-
-        let c = self.content.char(offset);
-        self.content.remove(offset..offset + 1);
-        Some(c)
+    pub fn delete(&mut self, offset: usize) {
+        let end = self.next_grapheme_offset(offset);
+        self.content.remove(offset..end);
     }
 
-    pub fn backspace(&mut self, offset: usize) -> Option<char> {
-        if offset == 0 && offset >= self.content.len_chars() {
-            return None;
+    pub fn backspace(&mut self, offset: usize) {
+        if offset == 0 {
+            return;
         }
 
-        assert!(
-            self.content.len_chars() > 0,
-            "Trying to remove from empty buffer"
-        );
-
-        // Only perform backspace if there is actually text and `offset` is in-bounds.
-        let c = self.content.char(offset - 1);
-        self.content.remove(offset - 1..offset);
-        Some(c)
+        let start = self.prev_grapheme_offset(offset);
+        self.content.remove(start..offset);
     }
 }

@@ -7,3 +7,5 @@ edition = "2021"
 iced = { version = "0.13.1", features = ["canvas", "debug", "advanced"]}
 iced_graphics = "0.13"
 ropey = "1.6.1"
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2.0"
