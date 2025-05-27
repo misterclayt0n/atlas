@@ -1,3 +1,4 @@
+// TODO: Add scrolling.
 // TODO: Add vim mode.
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
@@ -12,6 +13,8 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
+// FIX: Desired col not working.
+
 use engine::{cursor::TextPosition, workspace::Workspace};
 use iced::Element;
 
@@ -26,6 +29,7 @@ pub enum Message {
     InsertChar(char),
     Backspace,
     Delete, // Delete key
+    Quit,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +111,9 @@ impl Atlas {
                 let pos = window.editor.cursor.position();
                 window.editor.buffer.delete(pos.offset);
                 // Cursor stays in place for delete.
+            }
+            Message::Quit => {
+                std::process::exit(0);
             }
         }
     }

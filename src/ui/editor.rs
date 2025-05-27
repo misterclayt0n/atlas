@@ -351,10 +351,10 @@ where
             },
 
             // 2) Keyboard input.
-            Event::Keyboard(keyboard::Event::KeyPressed { key, text, .. }) => {
+            Event::Keyboard(keyboard::Event::KeyPressed { key, text, modifiers, .. }) => {
                 // Only capture if we are focused.
                 if editor_state.is_focused {
-                    match key {
+                    match key.as_ref() {
                         Key::Named(keyboard::key::Named::ArrowUp) => {
                             shell.publish(Message::CursorMove(CursorMovement::Up));
                             return event::Status::Captured;
@@ -414,6 +414,11 @@ where
                         }
                         Key::Named(keyboard::key::Named::Delete) => {
                             shell.publish(Message::Delete);
+                            return event::Status::Captured;
+                        }
+
+                        Key::Character("q") if modifiers.control() => {
+                            shell.publish(Message::Quit);
                             return event::Status::Captured;
                         }
 
