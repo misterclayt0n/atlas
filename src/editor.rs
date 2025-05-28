@@ -27,7 +27,6 @@ pub struct Editor {
     pub cursor: Cursor,
     mode: EditorMode,
     scroll_offset: Point,
-    target_scroll_off: Point,
 }
 
 #[derive(Debug)]
@@ -113,7 +112,6 @@ impl Editor {
             cursor: Cursor::new(),
             mode: EditorMode::Normal,
             scroll_offset: Point::new(0.0, 0.0),
-            target_scroll_off: Point::new(0.0, 0.0),
         }
     }
 
@@ -173,8 +171,8 @@ impl Editor {
         let cursor_y = cursor_pos.line as f32 * line_height;
 
         // Defining vertical limits.
-        let top_limit = self.target_scroll_off.y + Self::MARGIN_LINES as f32 * line_height;
-        let bottom_limit = self.target_scroll_off.y + bounds.height
+        let top_limit = self.scroll_offset.y + Self::MARGIN_LINES as f32 * line_height;
+        let bottom_limit = self.scroll_offset.y + bounds.height
             - (Self::MARGIN_LINES + 1) as f32 * line_height;
 
         // Vertical scrolling
@@ -186,9 +184,8 @@ impl Editor {
         }
 
         // Defining horizontal limits.
-        let left_limit = self.target_scroll_off.x + Self::MARGIN_COL as f32 * char_width;
-        let right_limit =
-            self.target_scroll_off.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
+        let left_limit = self.scroll_offset.x + Self::MARGIN_COL as f32 * char_width;
+        let right_limit = self.scroll_offset.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
 
         // Horizontal scrolling
         if cursor_x < left_limit {
