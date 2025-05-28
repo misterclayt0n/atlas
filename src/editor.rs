@@ -5,15 +5,17 @@ use iced::{
         text::Paragraph as _,
         widget::Tree,
         Clipboard, Layout, Shell, Text, Widget,
-    }, alignment, keyboard::{self, Key}, widget::span, Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme
+    },
+    alignment,
+    keyboard::{self, Key},
+    widget::span,
+    Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
 };
 use iced_graphics::text::Paragraph;
 
 use crate::{
-    engine::{
-        buffer::Buffer,
-        cursor::{Cursor, TextPosition},
-    },
+    buffer::Buffer,
+    cursor::{Cursor, TextPosition},
     CursorMovement, Message,
 };
 
@@ -24,12 +26,16 @@ pub struct Editor {
     pub buffer: Buffer,
     pub cursor: Cursor,
     mode: EditorMode,
+    scroll_offset: Point,
 }
 
 #[derive(Debug)]
 struct EditorState {
     is_focused: bool,
-    cached_char_width: Option<f32>
+    // Cached values
+    char_width: Option<f32>,
+    line_height: Option<f32>,
+    bounds: Rectangle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -43,7 +49,9 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             is_focused: true, // This is for coding experience.
-            cached_char_width: None,
+            char_width: None,
+            line_height: None,
+            bounds: Rectangle::default(),
         }
     }
 }
@@ -53,7 +61,7 @@ impl Editor {
         // Create a paragraph with a single character to get precise width.
         // NOTE: We probably need to cache this.
         let bounds = Size::new(1000.0, 100.0);
-        
+
         // We assume all characters have the same width, hence only monospaced fonts work.
         let paragraph = self.create_paragraph("M", bounds, renderer);
 
@@ -100,9 +108,11 @@ impl Editor {
             buffer: Buffer::new("", "Atlas"),
             cursor: Cursor::new(),
             mode: EditorMode::Normal,
+            scroll_offset: Point::new(0.0, 0.0),
         }
     }
 
+    // TODO: We should likely call ensure_cursor_visible here.
     pub fn move_cursor(&mut self, movement: CursorMovement) {
         let new_position = match movement {
             CursorMovement::Left => self.cursor.move_left(&self.buffer),
@@ -149,6 +159,26 @@ impl Editor {
                     *active = position;
                 }
             }
+        }
+    }
+
+    fn ensure_cursor_visible(&mut self, bounds: Rectangle, char_width: f32, line_height: f32) {
+        let cursor_pos = self.cursor.position();
+        let cursor_x = cursor_pos.col as f32 * char_width;
+        let cursor_y = cursor_pos.line as f32 * line_height;
+
+        // Vertical scrolling
+        if cursor_y < self.scroll_offset.y {
+            self.scroll_offset.y = cursor_y;
+        } else if cursor_y + line_height > self.scroll_offset.y + bounds.height {
+            self.scroll_offset.y = cursor_y + line_height - bounds.height;
+        }
+
+        // Horizontal scrolling
+        if cursor_x < self.scroll_offset.x {
+            self.scroll_offset.x = cursor_x;
+        } else if cursor_x + char_width > self.scroll_offset.x + bounds.width {
+            self.scroll_offset.x = cursor_x + char_width - bounds.width;
         }
     }
 
@@ -253,9 +283,17 @@ where
     ) -> iced::advanced::layout::Node {
         let state = tree.state.downcast_mut::<EditorState>();
 
-        if state.cached_char_width.is_none() {
-            state.cached_char_width = Some(self.char_width(renderer));
+        if state.char_width.is_none() {
+            state.char_width = Some(self.char_width(renderer));
+            state.line_height = Some(self.line_height(renderer));
         }
+
+        state.bounds = Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: limits.max().width,
+            height: limits.max().height,
+        };
 
         layout::Node::new(limits.max())
     }
@@ -271,9 +309,14 @@ where
         _viewport: &iced::Rectangle,
     ) {
         let bounds = layout.bounds();
-        let content = self.buffer.content.to_string();
         let state = tree.state.downcast_ref::<EditorState>();
-        let char_w = state.cached_char_width.unwrap_or_else(|| self.char_width(renderer));
+        
+        let char_w = state
+            .char_width
+            .unwrap_or_else(|| self.char_width(renderer));
+        let line_height = state
+            .line_height
+            .unwrap_or_else(|| self.line_height(renderer));
 
         // Draw background.
         renderer.fill_quad(
@@ -289,34 +332,49 @@ where
             Color::from_rgb(0.1, 0.1, 0.1),
         );
 
-        // Draw the text
-        renderer.fill_text(
-            Text {
-                content,
-                bounds: bounds.size(),
-                size: renderer.default_size(),
-                line_height: 1.2.into(),
-                font: renderer.default_font(),
-                horizontal_alignment: alignment::Horizontal::Left,
-                vertical_alignment: alignment::Vertical::Top,
-                shaping: iced::widget::text::Shaping::Basic,
-                wrapping: iced::widget::text::Wrapping::None,
-            },
-            bounds.position(),
-            iced::Color::WHITE, // Text color
-            bounds,
-        );
+        // Calculate visible line range.
+        let first_line = (self.scroll_offset.y / line_height).floor() as usize;
+        let visible_lines = (bounds.height / line_height).ceil() as usize;
+        let total_lines = self.buffer.content.len_lines();
+        let end_line = (first_line + visible_lines).min(total_lines);
+
+        // Calculate visible column range.
+        let first_col = (self.scroll_offset.x / char_w).floor() as usize;
+        let visible_cols = (bounds.width / char_w).ceil() as usize;
+        
+        // Render each visible line.
+        for line_idx in first_line..end_line {
+            let visible_content = self.buffer.grapheme_substring(line_idx, first_col, visible_cols);
+            let y = bounds.y + (line_idx as f32 * line_height - self.scroll_offset.y);
+            let position = Point::new(bounds.x, y);
+
+            renderer.fill_text(
+                Text {
+                    content: visible_content,
+                    bounds: Size::new(bounds.width, line_height), // Size per line.
+                    size: renderer.default_size(),
+                    line_height: 1.2.into(),
+                    font: renderer.default_font(),
+                    horizontal_alignment: alignment::Horizontal::Left,
+                    vertical_alignment: alignment::Vertical::Top,
+                    shaping: iced::widget::text::Shaping::Basic,
+                    wrapping: iced::widget::text::Wrapping::None,
+                },
+                position,
+                iced::Color::WHITE,
+                bounds, // Clip to widget bounds.
+            );
+        }
 
         // Draw cursor.
-        let cursor_point = self
-            .cursor
-            .to_point(char_w, self.line_height(renderer));
-
+        let cursor_pos = self.cursor.position();
+        let cursor_x = bounds.x + (cursor_pos.col as f32 * char_w - self.scroll_offset.x);
+        let cursor_y = bounds.y + (cursor_pos.line as f32 * line_height - self.scroll_offset.y);
         self.draw_cursor(
             renderer,
-            cursor_point,
+            Point::new(cursor_x, cursor_y),
             char_w,
-            self.line_height(renderer),
+            line_height,
             layout,
         );
     }
@@ -327,13 +385,18 @@ where
         event: Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _renderer: &Renderer,
+        renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) -> event::Status {
         // Access our custom state.
         let editor_state = tree.state.downcast_mut::<EditorState>();
+        let char_width = editor_state
+            .char_width
+            .unwrap_or_else(|| self.char_width(renderer));
+        let line_height = self.line_height(renderer);
+        editor_state.bounds = layout.bounds();
 
         match event {
             Event::Mouse(mouse_event) => match mouse_event {
@@ -346,89 +409,171 @@ where
                         editor_state.is_focused = false;
                     }
                 }
+                mouse::Event::WheelScrolled { delta } => {
+                    if cursor.is_over(layout.bounds()) {
+                        match delta {
+                            mouse::ScrollDelta::Lines { y, .. } => {
+                                self.scroll_offset.y =
+                                    (self.scroll_offset.y - y * line_height).max(0.0);
+                            }
+                            mouse::ScrollDelta::Pixels { y, .. } => {
+                                self.scroll_offset.y = (self.scroll_offset.y - y).max(0.0);
+                            }
+                        }
+
+                        return event::Status::Captured;
+                    }
+                }
                 _ => {}
             },
 
-            Event::Keyboard(keyboard::Event::KeyPressed { key, text, modifiers, .. }) => {
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key,
+                text,
+                modifiers,
+                ..
+            }) => {
                 // Only capture if we are focused.
                 if editor_state.is_focused {
                     match key.as_ref() {
                         Key::Named(keyboard::key::Named::ArrowUp) => {
-                            shell.publish(Message::CursorMove(CursorMovement::Up));
+                            self.move_cursor(CursorMovement::Up);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::ArrowDown) => {
-                            shell.publish(Message::CursorMove(CursorMovement::Down));
+                            self.move_cursor(CursorMovement::Down);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::ArrowLeft) => {
-                            shell.publish(Message::CursorMove(CursorMovement::Left));
+                            self.move_cursor(CursorMovement::Left);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::ArrowRight) => {
-                            shell.publish(Message::CursorMove(CursorMovement::Right));
+                            self.move_cursor(CursorMovement::Right);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Enter) => {
-                            let current_pos = self.cursor.position();
-                            shell.publish(Message::InsertChar('\n'));
-
-                            // Explicitly move cursor to new line
+                            let pos = self.cursor.position();
+                            self.buffer.insert_char(pos.offset, '\n');
                             if let Ok(new_line_start) =
-                                self.buffer.content.try_line_to_char(current_pos.line + 1)
+                                self.buffer.content.try_line_to_char(pos.line + 1)
                             {
-                                shell.publish(Message::CursorMove(CursorMovement::Position(
-                                    TextPosition::new(current_pos.line + 1, 0, new_line_start),
+                                self.move_cursor(CursorMovement::Position(TextPosition::new(
+                                    pos.line + 1,
+                                    0,
+                                    new_line_start,
                                 )));
                             }
-
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Tab) => {
-                            shell.publish(Message::InsertChar('\t'));
+                            let pos = self.cursor.position();
+                            self.buffer.insert_char(pos.offset, '\t');
+                            self.move_cursor(CursorMovement::Right);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Space) => {
-                            // Handle dead keys here.
-                            // NOTE: This is the easiest way I've found to handle dead keys
-                            // There could exist some more elegant solution to this particular problem, but I'm too
-                            // lazy to find it, so we'll leave it like this for now.
+                            let pos = self.cursor.position();
                             if let Some(dead_key) = text {
                                 for c in dead_key.chars() {
                                     if !c.is_control() {
-                                        shell.publish(Message::InsertChar(c))
+                                        self.buffer.insert_char(pos.offset, c);
+                                        self.move_cursor(CursorMovement::Right);
                                     }
                                 }
-
-                                return event::Status::Captured;
+                            } else {
+                                self.buffer.insert_char(pos.offset, ' ');
+                                self.move_cursor(CursorMovement::Right);
                             }
-
-                            shell.publish(Message::InsertChar(' '));
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Backspace) => {
-                            shell.publish(Message::Backspace);
+                            let pos = self.cursor.position();
+                            if pos.offset > 0 {
+                                if pos.col == 0 && pos.line > 0 {
+                                    let prev_line_length =
+                                        self.buffer.visual_line_length(pos.line - 1);
+                                    self.buffer.backspace(pos.offset);
+                                    self.move_cursor(CursorMovement::Position(TextPosition::new(
+                                        pos.line - 1,
+                                        prev_line_length,
+                                        pos.offset - 1,
+                                    )));
+                                } else {
+                                    self.buffer.backspace(pos.offset);
+                                    self.move_cursor(CursorMovement::Left);
+                                }
+                            }
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
                         Key::Named(keyboard::key::Named::Delete) => {
-                            shell.publish(Message::Delete);
+                            let pos = self.cursor.position();
+                            self.buffer.delete(pos.offset);
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
                             return event::Status::Captured;
                         }
-
                         Key::Character("q") if modifiers.control() => {
                             shell.publish(Message::Quit);
                             return event::Status::Captured;
                         }
-
-                        // Insert characters.
                         Key::Character(_) => {
                             if let Some(composed) = text {
-                                // Insert each character from the final string
+                                let pos = self.cursor.position();
                                 for c in composed.chars() {
                                     if !c.is_control() {
-                                        shell.publish(Message::InsertChar(c));
+                                        self.buffer.insert_char(pos.offset, c);
+                                        self.move_cursor(CursorMovement::Right);
                                     }
                                 }
+                                self.ensure_cursor_visible(
+                                    editor_state.bounds,
+                                    char_width,
+                                    line_height,
+                                );
                                 return event::Status::Captured;
                             }
                         }

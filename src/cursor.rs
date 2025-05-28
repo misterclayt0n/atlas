@@ -45,7 +45,7 @@ impl Cursor {
     }
 
     /// Converts cursor position to screen coordinates.
-    pub fn to_point(&self, char_width: f32, line_height: f32) -> Point {
+    pub fn _to_point(&self, char_width: f32, line_height: f32) -> Point {
         let pos = self.position();
         Point::new(pos.col as f32 * char_width, pos.line as f32 * line_height)
     }

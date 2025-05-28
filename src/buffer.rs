@@ -31,6 +31,16 @@ impl Buffer {
             .to_string()
     }
 
+    pub fn grapheme_substring(&self, line: usize, start: usize, len: usize) -> String {
+        let content = self.visible_line_content(line);
+        content
+            .graphemes(true)
+            .skip(start)
+            .take(len)
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
     pub fn visual_line_length(&self, line: usize) -> usize {
         self.visible_line_content(line).chars().count()
     }
@@ -68,7 +78,10 @@ impl Buffer {
 
     /// Given a char offset, return the previous grapheme boundary.
     pub fn prev_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(offset <= self.content.len_chars(), "Offset {offset} exceeds content length");
+        assert!(
+            offset <= self.content.len_chars(),
+            "Offset {offset} exceeds content length"
+        );
 
         if offset == 0 {
             return 0;
@@ -86,7 +99,10 @@ impl Buffer {
 
     /// Next boundary.
     pub fn next_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(offset <= self.content.len_chars(), "Offset {offset} exceeds content length");
+        assert!(
+            offset <= self.content.len_chars(),
+            "Offset {offset} exceeds content length"
+        );
 
         let total = self.content.len_chars();
         if offset >= total {
