@@ -27,6 +27,7 @@ pub struct Editor {
     pub cursor: Cursor,
     mode: EditorMode,
     scroll_offset: Point,
+    target_scroll_off: Point,
 }
 
 #[derive(Debug)]
@@ -57,6 +58,9 @@ impl Default for EditorState {
 }
 
 impl Editor {
+    const MARGIN_LINES: usize = 3;
+    const MARGIN_COL: usize = 8;
+
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>) -> f32 {
         // Create a paragraph with a single character to get precise width.
         // NOTE: We probably need to cache this.
@@ -109,6 +113,7 @@ impl Editor {
             cursor: Cursor::new(),
             mode: EditorMode::Normal,
             scroll_offset: Point::new(0.0, 0.0),
+            target_scroll_off: Point::new(0.0, 0.0),
         }
     }
 
@@ -167,18 +172,30 @@ impl Editor {
         let cursor_x = cursor_pos.col as f32 * char_width;
         let cursor_y = cursor_pos.line as f32 * line_height;
 
+        // Defining vertical limits.
+        let top_limit = self.target_scroll_off.y + Self::MARGIN_LINES as f32 * line_height;
+        let bottom_limit = self.target_scroll_off.y + bounds.height
+            - (Self::MARGIN_LINES + 1) as f32 * line_height;
+
         // Vertical scrolling
-        if cursor_y < self.scroll_offset.y {
-            self.scroll_offset.y = cursor_y;
-        } else if cursor_y + line_height > self.scroll_offset.y + bounds.height {
-            self.scroll_offset.y = cursor_y + line_height - bounds.height;
+        if cursor_y < top_limit {
+            self.scroll_offset.y = (cursor_y - Self::MARGIN_LINES as f32 * line_height).max(0.0);
+        } else if cursor_y > bottom_limit {
+            self.scroll_offset.y =
+                (cursor_y + (Self::MARGIN_LINES + 1) as f32 * line_height) - bounds.height;
         }
 
+        // Defining horizontal limits.
+        let left_limit = self.target_scroll_off.x + Self::MARGIN_COL as f32 * char_width;
+        let right_limit =
+            self.target_scroll_off.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
+
         // Horizontal scrolling
-        if cursor_x < self.scroll_offset.x {
-            self.scroll_offset.x = cursor_x;
-        } else if cursor_x + char_width > self.scroll_offset.x + bounds.width {
-            self.scroll_offset.x = cursor_x + char_width - bounds.width;
+        if cursor_x < left_limit {
+            self.scroll_offset.x = (cursor_x - Self::MARGIN_COL as f32 * char_width).max(0.0);
+        } else if cursor_x > right_limit {
+            self.scroll_offset.x =
+                (cursor_x + (Self::MARGIN_COL + 1) as f32 * char_width) - bounds.width;
         }
     }
 
@@ -310,7 +327,7 @@ where
     ) {
         let bounds = layout.bounds();
         let state = tree.state.downcast_ref::<EditorState>();
-        
+
         let char_w = state
             .char_width
             .unwrap_or_else(|| self.char_width(renderer));
@@ -341,10 +358,12 @@ where
         // Calculate visible column range.
         let first_col = (self.scroll_offset.x / char_w).floor() as usize;
         let visible_cols = (bounds.width / char_w).ceil() as usize;
-        
+
         // Render each visible line.
         for line_idx in first_line..end_line {
-            let visible_content = self.buffer.grapheme_substring(line_idx, first_col, visible_cols);
+            let visible_content = self
+                .buffer
+                .grapheme_substring(line_idx, first_col, visible_cols);
             let y = bounds.y + (line_idx as f32 * line_height - self.scroll_offset.y);
             let position = Point::new(bounds.x, y);
 

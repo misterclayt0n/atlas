@@ -1,4 +1,4 @@
-// TODO: Add scrolling.
+// TODO: Add some lerp animation to scrolling (minimal stuff).
 // TODO: Add vim mode.
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
@@ -13,6 +13,7 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
+// FIX: Scrolling vertically (from bottom to top, it gets "glued").
 
 use cursor::TextPosition;
 use editor::Editor;
