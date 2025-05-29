@@ -11,12 +11,13 @@ use iced::{
     widget::span,
     Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
 };
-use iced_graphics::text::Paragraph;
+use iced_graphics::{core::SmolStr, text::Paragraph};
 
 use crate::{
     buffer::Buffer,
-    cursor::{Cursor, TextPosition},
-    CursorMovement, Message,
+    cursor::Cursor,
+    vim::{KeyEvent, VimEngine, VimMode},
+    Message,
 };
 
 /// Custom widget that handles the visual representation of text content.
@@ -25,8 +26,8 @@ use crate::{
 pub struct Editor {
     pub buffer: Buffer,
     pub cursor: Cursor,
-    mode: EditorMode,
     scroll_offset: Point,
+    vim: VimEngine,
 }
 
 #[derive(Debug)]
@@ -36,13 +37,6 @@ struct EditorState {
     char_width: Option<f32>,
     line_height: Option<f32>,
     bounds: Rectangle,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EditorMode {
-    Normal,
-    Insert,
-    // Visual, // TODO
 }
 
 impl Default for EditorState {
@@ -59,6 +53,15 @@ impl Default for EditorState {
 impl Editor {
     const MARGIN_LINES: usize = 3;
     const MARGIN_COL: usize = 8;
+
+    pub fn new() -> Self {
+        Self {
+            buffer: Buffer::new("", "Atlas"),
+            cursor: Cursor::new(),
+            vim: VimEngine::default(),
+            scroll_offset: Point::new(0.0, 0.0),
+        }
+    }
 
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>) -> f32 {
         // Create a paragraph with a single character to get precise width.
@@ -106,65 +109,6 @@ impl Editor {
         return size * 1.2;
     }
 
-    pub fn new() -> Self {
-        Self {
-            buffer: Buffer::new("", "Atlas"),
-            cursor: Cursor::new(),
-            mode: EditorMode::Normal,
-            scroll_offset: Point::new(0.0, 0.0),
-        }
-    }
-
-    // TODO: We should likely call ensure_cursor_visible here.
-    pub fn move_cursor(&mut self, movement: CursorMovement) {
-        let new_position = match movement {
-            CursorMovement::Left => self.cursor.move_left(&self.buffer),
-            CursorMovement::Right => self.cursor.move_right(&self.buffer),
-            CursorMovement::Up => self.cursor.move_up(&self.buffer),
-            CursorMovement::Down => self.cursor.move_down(&self.buffer),
-            CursorMovement::Position(position) => {
-                self.cursor.move_to_position(position, &self.buffer)
-            }
-        };
-
-        if let Some(position) = new_position {
-            assert!(
-                position.line < self.buffer.content.len_lines(),
-                "Cursor line overflow: {} >= {}",
-                position.line,
-                self.buffer.content.len_lines()
-            );
-
-            assert!(
-                position.offset <= self.buffer.content.len_chars(),
-                "Cursor offset overflow: {} > {}",
-                position.offset,
-                self.buffer.content.len_chars()
-            );
-
-            match &mut self.cursor {
-                Cursor::Normal {
-                    position: pos,
-                    preferred_column,
-                } => {
-                    *pos = position;
-                    // Only update `preferred_column` for horizontal moves or explicit positioning.
-                    match movement {
-                        CursorMovement::Left
-                        | CursorMovement::Right
-                        | CursorMovement::Position(_) => {
-                            *preferred_column = Some(position.col);
-                        }
-                        _ => {}
-                    }
-                }
-                Cursor::_Selection { active, .. } => {
-                    *active = position;
-                }
-            }
-        }
-    }
-
     fn ensure_cursor_visible(&mut self, bounds: Rectangle, char_width: f32, line_height: f32) {
         let cursor_pos = self.cursor.position();
         let cursor_x = cursor_pos.col as f32 * char_width;
@@ -172,8 +116,8 @@ impl Editor {
 
         // Defining vertical limits.
         let top_limit = self.scroll_offset.y + Self::MARGIN_LINES as f32 * line_height;
-        let bottom_limit = self.scroll_offset.y + bounds.height
-            - (Self::MARGIN_LINES + 1) as f32 * line_height;
+        let bottom_limit =
+            self.scroll_offset.y + bounds.height - (Self::MARGIN_LINES + 1) as f32 * line_height;
 
         // Vertical scrolling
         if cursor_y < top_limit {
@@ -185,7 +129,8 @@ impl Editor {
 
         // Defining horizontal limits.
         let left_limit = self.scroll_offset.x + Self::MARGIN_COL as f32 * char_width;
-        let right_limit = self.scroll_offset.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
+        let right_limit =
+            self.scroll_offset.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
 
         // Horizontal scrolling
         if cursor_x < left_limit {
@@ -209,14 +154,14 @@ impl Editor {
         line_height: f32,
         layout: iced::advanced::Layout<'_>,
     ) {
-        let cursor_bounds = match self.mode {
-            EditorMode::Normal => Rectangle {
+        let cursor_bounds = match self.vim.mode {
+            VimMode::Normal => Rectangle {
                 x: position.x,
                 y: position.y,
                 width: char_width, // Block, basically.
                 height: line_height,
             },
-            EditorMode::Insert => Rectangle {
+            VimMode::Insert => Rectangle {
                 x: position.x,
                 y: position.y,
                 width: 2.0,
@@ -232,13 +177,13 @@ impl Editor {
                 ' '
             };
 
-        let cursor_background = match self.mode {
-            EditorMode::Normal => Color::WHITE,
-            EditorMode::Insert => Color::WHITE,
+        let cursor_background = match self.vim.mode {
+            VimMode::Normal => Color::WHITE,
+            VimMode::Insert => Color::WHITE,
         };
 
-        let text_color = match self.mode {
-            EditorMode::Normal => Color::BLACK,
+        let text_color = match self.vim.mode {
+            VimMode::Normal => Color::BLACK,
             _ => Color::WHITE,
         };
 
@@ -251,7 +196,7 @@ impl Editor {
         );
 
         // Draw character (for Normal/Visual modes) inside the cursor block.
-        if self.mode != EditorMode::Insert {
+        if self.vim.mode != VimMode::Insert {
             renderer.fill_text(
                 Text {
                     content: char_under_cursor.to_string(),
@@ -403,7 +348,7 @@ where
         cursor: mouse::Cursor,
         renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
+        _shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) -> event::Status {
         // Access our custom state.
@@ -443,160 +388,19 @@ where
                 _ => {}
             },
 
-            Event::Keyboard(keyboard::Event::KeyPressed {
-                key,
-                text,
-                modifiers,
-                ..
-            }) => {
+            Event::Keyboard(keyboard::Event::KeyPressed { key, text, .. }) => {
                 // Only capture if we are focused.
-                if editor_state.is_focused {
-                    match key.as_ref() {
-                        Key::Named(keyboard::key::Named::ArrowUp) => {
-                            self.move_cursor(CursorMovement::Up);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::ArrowDown) => {
-                            self.move_cursor(CursorMovement::Down);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::ArrowLeft) => {
-                            self.move_cursor(CursorMovement::Left);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::ArrowRight) => {
-                            self.move_cursor(CursorMovement::Right);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::Enter) => {
-                            let pos = self.cursor.position();
-                            self.buffer.insert_char(pos.offset, '\n');
-                            if let Ok(new_line_start) =
-                                self.buffer.content.try_line_to_char(pos.line + 1)
-                            {
-                                self.move_cursor(CursorMovement::Position(TextPosition::new(
-                                    pos.line + 1,
-                                    0,
-                                    new_line_start,
-                                )));
-                            }
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::Tab) => {
-                            let pos = self.cursor.position();
-                            self.buffer.insert_char(pos.offset, '\t');
-                            self.move_cursor(CursorMovement::Right);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::Space) => {
-                            let pos = self.cursor.position();
-                            if let Some(dead_key) = text {
-                                for c in dead_key.chars() {
-                                    if !c.is_control() {
-                                        self.buffer.insert_char(pos.offset, c);
-                                        self.move_cursor(CursorMovement::Right);
-                                    }
-                                }
-                            } else {
-                                self.buffer.insert_char(pos.offset, ' ');
-                                self.move_cursor(CursorMovement::Right);
-                            }
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::Backspace) => {
-                            let pos = self.cursor.position();
-                            if pos.offset > 0 {
-                                if pos.col == 0 && pos.line > 0 {
-                                    let prev_line_length =
-                                        self.buffer.visual_line_length(pos.line - 1);
-                                    self.buffer.backspace(pos.offset);
-                                    self.move_cursor(CursorMovement::Position(TextPosition::new(
-                                        pos.line - 1,
-                                        prev_line_length,
-                                        pos.offset - 1,
-                                    )));
-                                } else {
-                                    self.buffer.backspace(pos.offset);
-                                    self.move_cursor(CursorMovement::Left);
-                                }
-                            }
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Named(keyboard::key::Named::Delete) => {
-                            let pos = self.cursor.position();
-                            self.buffer.delete(pos.offset);
-                            self.ensure_cursor_visible(
-                                editor_state.bounds,
-                                char_width,
-                                line_height,
-                            );
-                            return event::Status::Captured;
-                        }
-                        Key::Character("q") if modifiers.control() => {
-                            shell.publish(Message::Quit);
-                            return event::Status::Captured;
-                        }
-                        Key::Character(_) => {
-                            if let Some(composed) = text {
-                                let pos = self.cursor.position();
-                                for c in composed.chars() {
-                                    if !c.is_control() {
-                                        self.buffer.insert_char(pos.offset, c);
-                                        self.move_cursor(CursorMovement::Right);
-                                    }
-                                }
-                                self.ensure_cursor_visible(
-                                    editor_state.bounds,
-                                    char_width,
-                                    line_height,
-                                );
-                                return event::Status::Captured;
-                            }
-                        }
+                if !editor_state.is_focused {
+                    return event::Status::Ignored;
+                }
 
-                        // TODO: Handle more keys.
-                        _ => {}
-                    }
+                let maybe_action =
+                    translate_to_keyevent(&key, &text).and_then(|ke| self.vim.handle_key(ke));
+
+                if let Some(action) = maybe_action {
+                    crate::vim::execute(action, &mut self.buffer, &mut self.cursor);
+                    self.ensure_cursor_visible(editor_state.bounds, char_width, line_height);
+                    return event::Status::Captured;
                 }
             }
             _ => {}
@@ -616,5 +420,20 @@ where
 {
     fn into(self) -> Element<'a, Message, Theme, Renderer> {
         Element::new(self)
+    }
+}
+
+fn translate_to_keyevent(key: &Key, text: &Option<SmolStr>) -> Option<KeyEvent> {
+    let text_str = text.as_ref().map(|t| t.to_string());
+
+    match key.as_ref() {
+        Key::Named(keyboard::key::Named::Escape) => Some(KeyEvent::Esc),
+        Key::Named(keyboard::key::Named::Backspace) => Some(KeyEvent::Backspace),
+        Key::Named(keyboard::key::Named::Enter) => Some(KeyEvent::Enter),
+        // Key::Named(keyboard::key::Named::Space) => Some(KeyEvent::Space),
+        _ => Some(KeyEvent::Key {
+            key: key.clone(),
+            text: text_str,
+        }),
     }
 }

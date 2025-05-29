@@ -1,6 +1,8 @@
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::cursor::{Cursor, TextPosition};
+
 /// Represents a text buffer in the editor.
 /// Handles the actual content storage and text manipulation operations.
 #[derive(Debug, Clone, Default)]
@@ -122,15 +124,57 @@ impl Buffer {
             .byte_to_char(start_byte + next_byte_off_in_slice)
     }
 
-    pub fn insert_char(&mut self, offset: usize, c: char) {
+    pub fn insert_char(&mut self, cursor: &mut Cursor, c: char) {
+        let pos = cursor.position();
+
         assert!(
-            offset <= self.content.len_chars(),
+            pos.offset <= self.content.len_chars(),
             "Insert out of bounds: {} > {}",
-            offset,
+            pos.offset,
             self.content.len_chars()
         );
 
-        self.content.insert_char(offset, c)
+        self.content.insert_char(pos.offset , c);
+        cursor.move_to_position(
+            TextPosition::new(pos.line, pos.col + 1, pos.offset + 1),
+            self,
+        );
+    }
+
+    pub fn insert_text(&mut self, cursor: &mut Cursor, s: &str) {
+        let pos = cursor.position();
+
+        assert!(
+            pos.offset <= self.content.len_chars(),
+            "Insert out of bounds: {} > {}",
+            pos.offset,
+            self.content.len_chars()
+        );
+
+        self.content.insert(pos.offset, s);
+        let char_count = s.chars().count();
+        if s.contains('\n') {
+            let new_offset = pos.offset + char_count;
+            let new_line = self.content.char_to_line(new_offset);
+            let line_start = self.content.line_to_char(new_line);
+            cursor.move_to_position(
+                TextPosition::new(new_line, new_offset - line_start, new_offset),
+                self
+            );
+        } else {
+            cursor.move_to_position(
+                TextPosition::new(pos.line, pos.col + s.graphemes(true).count(), pos.offset + char_count),
+                self,
+            );
+        }
+    }
+
+    pub fn insert_newline(&mut self, cursor: &mut Cursor) {
+        let pos = cursor.position();
+        self.content.insert_char(pos.offset, '\n');
+        let new_line = pos.line + 1;
+        let new_offset = self.content.line_to_char(new_line);
+        cursor.move_to_position(TextPosition::new(new_line, 0, new_offset), self);
     }
 
     pub fn delete(&mut self, offset: usize) {
@@ -145,19 +189,33 @@ impl Buffer {
         self.content.remove(offset..end);
     }
 
-    pub fn backspace(&mut self, offset: usize) {
+    pub fn backspace(&mut self, cursor: &mut Cursor) {
+        let pos = cursor.position();
+
         assert!(
-            offset <= self.content.len_chars(),
+            pos.offset <= self.content.len_chars(),
             "Insert out of bounds: {} > {}",
-            offset,
+            pos.offset,
             self.content.len_chars()
         );
 
-        if offset == 0 {
+        if pos.offset == 0 {
             return;
         }
 
-        let start = self.prev_grapheme_offset(offset);
-        self.content.remove(start..offset);
+        let start = self.prev_grapheme_offset(pos.offset);
+        self.content.remove(start..pos.offset);
+
+        if pos.col == 0 && pos.line > 0 {
+            let prev_line = pos.line - 1;
+            let prev_line_length = self.visual_line_length(prev_line);
+            let new_offset = self.content.line_to_char(prev_line) + prev_line_length;
+            cursor.move_to_position(
+                TextPosition::new(prev_line, prev_line_length, new_offset),
+                self,
+            );
+        } else {
+            cursor.move_left(self);
+        }
     }
 }

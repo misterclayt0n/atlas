@@ -1,4 +1,3 @@
-// TODO: Add some lerp animation to scrolling (minimal stuff).
 // TODO: Add vim mode.
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
@@ -13,34 +12,19 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
-// FIX: Scrolling vertically (from bottom to top, it gets "glued").
 
-use cursor::TextPosition;
 use editor::Editor;
 use iced::Element;
 
 mod buffer;
 mod cursor;
 mod editor;
+mod vim;
 
 #[derive(Debug, Clone)]
 /// Represents possible actions that can be performed in the editor.
 pub enum Message {
-    TextInput(String),
-    InsertChar(char),
-    Backspace,
-    Delete, // Delete key
     Quit,
-}
-
-#[derive(Debug, Clone)]
-pub enum CursorMovement {
-    Up,
-    Down,
-    Left,
-    Right,
-    Position(TextPosition),
-    // TODO: Add more movement.
 }
 
 /// Main application structure.
@@ -67,39 +51,7 @@ impl Atlas {
 
     /// Handles all editor actions and updates state accordingly
     fn update(&mut self, message: Message) {
-        let editor = &mut self.editors[self.active_editor];
-
         match message {
-            Message::TextInput(text) => editor.buffer.content = text.into(),
-            Message::InsertChar(c) => {
-                let pos = editor.cursor.position();
-                editor.buffer.insert_char(pos.offset, c);
-                editor.move_cursor(CursorMovement::Right);
-            }
-            Message::Backspace => {
-                let pos = editor.cursor.position();
-                if pos.offset > 0 {
-                    if pos.col == 0 && pos.line > 0 {
-                        // Move cursor to the end of previous line.
-                        let prev_line_length = editor.buffer.visual_line_length(pos.line - 1);
-                        editor.buffer.backspace(pos.offset);
-                        editor.move_cursor(CursorMovement::Position(TextPosition::new(
-                            pos.line - 1,
-                            prev_line_length,
-                            pos.offset - 1,
-                        )));
-                    } else {
-                        // Normal backspace behavior.
-                        editor.buffer.backspace(pos.offset);
-                        editor.move_cursor(CursorMovement::Left)
-                    }
-                }
-            }
-            Message::Delete => {
-                // Cursor stays in place for delete.
-                let pos = editor.cursor.position();
-                editor.buffer.delete(pos.offset);
-            }
             Message::Quit => {
                 std::process::exit(0);
             }
