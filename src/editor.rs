@@ -430,7 +430,21 @@ fn translate_to_keyevent(key: &Key, text: &Option<SmolStr>) -> Option<KeyEvent> 
         Key::Named(keyboard::key::Named::Escape) => Some(KeyEvent::Esc),
         Key::Named(keyboard::key::Named::Backspace) => Some(KeyEvent::Backspace),
         Key::Named(keyboard::key::Named::Enter) => Some(KeyEvent::Enter),
-        // Key::Named(keyboard::key::Named::Space) => Some(KeyEvent::Space),
+        Key::Character(s) => {
+            if s.len() == 1 {
+                // Use text if available, fallback to key.
+                let c = text_str.unwrap_or(s.to_string());
+                Some(KeyEvent::Key {
+                    key: Key::Character(SmolStr::new(&c)),
+                    text: Some(c),
+                })
+            } else {
+                Some(KeyEvent::Key {
+                    key: key.clone(),
+                    text: text_str,
+                })
+            }
+        }
         _ => Some(KeyEvent::Key {
             key: key.clone(),
             text: text_str,

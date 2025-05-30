@@ -1,4 +1,3 @@
-// TODO: Add vim mode.
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
 // TODO: Command mode.

@@ -27,6 +27,25 @@ pub struct TextPosition {
     pub offset: usize, // Linear position in the buffer (character count from start).
 }
 
+#[derive(PartialEq)]
+enum CharClass {
+    Whitespace,
+    Word,
+    Punctuation,
+}
+
+fn get_char_class(c: char, big_word: bool) -> CharClass {
+    if c.is_whitespace() {
+        CharClass::Whitespace
+    } else if big_word {
+        CharClass::Word // All non-whitespace is a WORD.
+    } else if c.is_alphanumeric() || c == '_' {
+        CharClass::Word
+    } else {
+        CharClass::Punctuation
+    }
+}
+
 impl Cursor {
     pub fn new() -> Self {
         // This never starts with selection.
@@ -132,6 +151,58 @@ impl Cursor {
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
         self.set_position(new_pos, false);
 
+        Some(new_pos)
+    }
+
+    pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+        let total_chars = buffer.content.len_chars();
+        let cur = self.position();
+        let line_start = buffer.content.line_to_char(cur.line);
+        let mut char_idx = line_start + cur.col;
+
+        // If we're at or beyond the end of the buffer, no movement is possible.
+        if char_idx >= total_chars {
+            return None;
+        }
+
+        // Get the current character and it's class.
+        let c = buffer.content.char(char_idx);
+        let current_class = get_char_class(c, big_word);
+
+        // Skip over characters of the same class.
+        while char_idx < total_chars {
+            let c = buffer.content.char(char_idx);
+            let class = get_char_class(c, big_word);
+            if class == current_class {
+                char_idx += 1; // Move to next character.
+            } else {
+                break;
+            }
+        }
+
+        // Skip over any whitespace characters.
+        while char_idx < total_chars {
+            let c = buffer.content.char(char_idx);
+            if get_char_class(c, big_word) == CharClass::Whitespace {
+                char_idx += 1;
+            } else {
+                break;
+            }
+        }
+
+        // If we've reached the end, no valid position is found.
+        if char_idx >= total_chars {
+            return None;
+        }
+
+        // Convert char_idx to TextPosition.
+        let new_line = buffer.content.char_to_line(char_idx);
+        let line_start = buffer.content.line_to_char(new_line);
+        let new_col = char_idx - line_start;
+        let new_pos = TextPosition::new(new_line, new_col, char_idx);
+
+        self.set_position(new_pos, true);
+        
         Some(new_pos)
     }
 

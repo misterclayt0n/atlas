@@ -11,6 +11,7 @@ pub enum Motion {
     CharDown,
     ToLineStart,
     _ToLineEnd,
+    NextWordStart(bool), // NOTE: Boolean value to represent if it's a big word or not.
 }
 
 impl Motion {
@@ -20,6 +21,9 @@ impl Motion {
             'j' => Motion::CharDown,
             'k' => Motion::CharUp,
             'l' => Motion::CharRight,
+            'w' => Motion::NextWordStart(false),
+            // FIX: 'W' ain't working.
+            'W' => Motion::NextWordStart(true),
             _ => return None,
         })
     }
@@ -258,6 +262,9 @@ fn apply_motion(motion: Motion, buffer: &Buffer, cursor: &mut Cursor) {
         }
         Motion::CharDown => {
             cursor.move_down(buffer);
+        }
+        Motion::NextWordStart(big_word) => {
+            cursor.move_word_forward(buffer, big_word);
         }
         Motion::ToLineStart => {
             println!("Line start");
