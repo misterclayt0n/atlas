@@ -34,6 +34,11 @@ impl Buffer {
     }
 
     pub fn grapheme_substring(&self, line: usize, start: usize, len: usize) -> String {
+        assert!(
+            line < self.content.len_lines(),
+            "Line index out of range ({})",
+            line
+        );
         let content = self.visible_line_content(line);
         content
             .graphemes(true)
@@ -80,11 +85,7 @@ impl Buffer {
 
     /// Given a char offset, return the previous grapheme boundary.
     pub fn prev_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(
-            offset <= self.content.len_chars(),
-            "Offset {offset} exceeds content length"
-        );
-
+        self.validate_offset(offset);
         if offset == 0 {
             return 0;
         }
@@ -101,11 +102,7 @@ impl Buffer {
 
     /// Next boundary.
     pub fn next_grapheme_offset(&self, offset: usize) -> usize {
-        assert!(
-            offset <= self.content.len_chars(),
-            "Offset {offset} exceeds content length"
-        );
-
+        self.validate_offset(offset);
         let total = self.content.len_chars();
         if offset >= total {
             return total;
@@ -126,15 +123,9 @@ impl Buffer {
 
     pub fn insert_char(&mut self, cursor: &mut Cursor, c: char) {
         let pos = cursor.position();
+        self.validate_position(&pos);
 
-        assert!(
-            pos.offset <= self.content.len_chars(),
-            "Insert out of bounds: {} > {}",
-            pos.offset,
-            self.content.len_chars()
-        );
-
-        self.content.insert_char(pos.offset , c);
+        self.content.insert_char(pos.offset, c);
         cursor.move_to_position(
             TextPosition::new(pos.line, pos.col + 1, pos.offset + 1),
             self,
@@ -143,61 +134,49 @@ impl Buffer {
 
     pub fn insert_text(&mut self, cursor: &mut Cursor, s: &str) {
         let pos = cursor.position();
-
-        assert!(
-            pos.offset <= self.content.len_chars(),
-            "Insert out of bounds: {} > {}",
-            pos.offset,
-            self.content.len_chars()
-        );
+        self.validate_position(&pos);
 
         self.content.insert(pos.offset, s);
         let char_count = s.chars().count();
-        if s.contains('\n') {
+        let new_pos = if s.contains('\n') {
             let new_offset = pos.offset + char_count;
+            self.validate_offset(new_offset);
             let new_line = self.content.char_to_line(new_offset);
             let line_start = self.content.line_to_char(new_line);
-            cursor.move_to_position(
-                TextPosition::new(new_line, new_offset - line_start, new_offset),
-                self
-            );
+            TextPosition::new(new_line, new_offset - line_start, new_offset)
         } else {
-            cursor.move_to_position(
-                TextPosition::new(pos.line, pos.col + s.graphemes(true).count(), pos.offset + char_count),
-                self,
-            );
-        }
+            TextPosition::new(
+                pos.line,
+                pos.col + s.graphemes(true).count(),
+                pos.offset + char_count,
+            )
+        };
+        self.validate_position(&new_pos);
+        cursor.move_to_position(new_pos, self);
     }
 
     pub fn insert_newline(&mut self, cursor: &mut Cursor) {
         let pos = cursor.position();
+        self.validate_position(&pos);
         self.content.insert_char(pos.offset, '\n');
         let new_line = pos.line + 1;
         let new_offset = self.content.line_to_char(new_line);
-        cursor.move_to_position(TextPosition::new(new_line, 0, new_offset), self);
+        let new_pos = TextPosition::new(new_line, 0, new_offset);
+        self.validate_position(&new_pos);
+        cursor.move_to_position(new_pos, self);
     }
 
     pub fn delete(&mut self, offset: usize) {
-        assert!(
-            offset <= self.content.len_chars(),
-            "Insert out of bounds: {} > {}",
-            offset,
-            self.content.len_chars()
-        );
-
+        self.validate_offset(offset);
         let end = self.next_grapheme_offset(offset);
+        self.validate_offset(end);
+
         self.content.remove(offset..end);
     }
 
     pub fn backspace(&mut self, cursor: &mut Cursor) {
         let pos = cursor.position();
-
-        assert!(
-            pos.offset <= self.content.len_chars(),
-            "Insert out of bounds: {} > {}",
-            pos.offset,
-            self.content.len_chars()
-        );
+        self.validate_position(&pos);
 
         if pos.offset == 0 {
             return;
@@ -206,16 +185,54 @@ impl Buffer {
         let start = self.prev_grapheme_offset(pos.offset);
         self.content.remove(start..pos.offset);
 
-        if pos.col == 0 && pos.line > 0 {
+        let new_pos = if pos.col == 0 && pos.line > 0 {
             let prev_line = pos.line - 1;
             let prev_line_length = self.visual_line_length(prev_line);
             let new_offset = self.content.line_to_char(prev_line) + prev_line_length;
-            cursor.move_to_position(
-                TextPosition::new(prev_line, prev_line_length, new_offset),
-                self,
-            );
+            TextPosition::new(prev_line, prev_line_length, new_offset)
         } else {
-            cursor.move_left(self);
-        }
+            let new_col = pos.col - 1;
+            let new_offset = self.grapheme_col_to_offset(pos.line, new_col);
+            TextPosition::new(pos.line, new_col, new_offset)
+        };
+        
+        self.validate_position(&new_pos);
+        cursor.move_to_position(new_pos, self);
+    }
+
+    //
+    // Correctness.
+    //
+
+    pub fn validate_position(&self, pos: &TextPosition) {
+        assert!(
+            pos.line < self.content.len_lines(),
+            "Line {} exceeds buffer lines {}",
+            pos.line,
+            self.content.len_lines()
+        );
+        assert!(
+            pos.offset <= self.content.len_chars(),
+            "Offset {} exceeds total characters {}",
+            pos.offset,
+            self.content.len_chars()
+        );
+        assert_eq!(
+            pos.offset,
+            self.grapheme_col_to_offset(pos.line, pos.col),
+            "Offset {} does not match grapheme position for line {}, col {}",
+            pos.offset,
+            pos.line,
+            pos.col
+        );
+    }
+
+    pub fn validate_offset(&self, offset: usize) {
+        assert!(
+            offset <= self.content.len_chars(),
+            "Offset {} exceeds total characters {}",
+            offset,
+            self.content.len_chars()
+        );
     }
 }

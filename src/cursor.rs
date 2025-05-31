@@ -65,6 +65,17 @@ impl Cursor {
 
     /// Converts cursor position to screen coordinates.
     pub fn _to_point(&self, char_width: f32, line_height: f32) -> Point {
+        assert!(
+            char_width > 0.0,
+            "Character width {} must be positive",
+            char_width
+        );
+        assert!(
+            line_height > 0.0,
+            "Line height {} must be positive",
+            line_height
+        );
+
         let pos = self.position();
         Point::new(pos.col as f32 * char_width, pos.line as f32 * line_height)
     }
@@ -76,6 +87,8 @@ impl Cursor {
                 anchor: position,
                 active: position,
             };
+        } else {
+            assert!(false, "start_selection called on non normal cursor");
         }
     }
 
@@ -86,6 +99,8 @@ impl Cursor {
                 position: active,
                 preferred_column: None,
             };
+        } else {
+            assert!(false, "clear_selection called on non normal cursor");
         }
     }
 
@@ -95,6 +110,8 @@ impl Cursor {
 
     pub fn move_left(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let cur = self.position();
+        buffer.validate_position(&cur);
+
         if cur.col == 0 {
             return None;
         }
@@ -103,6 +120,8 @@ impl Cursor {
         let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
         let new_pos = TextPosition::new(cur.line, new_col, new_off);
 
+        buffer.validate_position(&new_pos);
+
         self.set_position(new_pos, true);
 
         Some(new_pos)
@@ -110,6 +129,8 @@ impl Cursor {
 
     pub fn move_right(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let cur = self.position();
+        buffer.validate_position(&cur);
+
         if cur.col >= buffer.grapheme_len(cur.line) {
             return None;
         }
@@ -118,6 +139,7 @@ impl Cursor {
         let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
         let new_pos = TextPosition::new(cur.line, new_col, new_off);
 
+        buffer.validate_position(&new_pos);
         self.set_position(new_pos, true);
 
         Some(new_pos)
@@ -125,15 +147,19 @@ impl Cursor {
 
     pub fn move_up(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let cur = self.position();
+        buffer.validate_position(&cur);
+
         if cur.line == 0 {
             return None;
         }
 
+        let target_line = cur.line - 1;
         let target_col = self.get_preferred_column().unwrap_or(cur.col);
-        let new_col = target_col.min(buffer.grapheme_len(cur.line - 1));
-        let new_off = buffer.grapheme_col_to_offset(cur.line - 1, new_col);
+        let new_col = target_col.min(buffer.grapheme_len(target_line));
+        let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
 
+        buffer.validate_position(&new_pos);
         self.set_position(new_pos, false);
 
         Some(new_pos)
@@ -141,14 +167,19 @@ impl Cursor {
 
     pub fn move_down(&mut self, buffer: &Buffer) -> Option<TextPosition> {
         let cur = self.position();
+        buffer.validate_position(&cur);
+
         if cur.line + 1 >= buffer.content.len_lines() {
             return None;
         }
 
+        let target_line = cur.line + 1;
         let target_col = self.get_preferred_column().unwrap_or(cur.col);
-        let new_col = target_col.min(buffer.grapheme_len(cur.line + 1));
-        let new_off = buffer.grapheme_col_to_offset(cur.line + 1, new_col);
+        let new_col = target_col.min(buffer.grapheme_len(target_line));
+        let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
+
+        buffer.validate_position(&new_pos);
         self.set_position(new_pos, false);
 
         Some(new_pos)
@@ -157,7 +188,18 @@ impl Cursor {
     pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
         let cur = self.position();
+
+        buffer.validate_position(&cur);
+
         let line_start = buffer.content.line_to_char(cur.line);
+
+        assert!(
+            line_start <= total_chars,
+            "Line start offset {} exceeds total characters {}",
+            line_start,
+            total_chars
+        );
+
         let mut char_idx = line_start + cur.col;
 
         // If we're at or beyond the end of the buffer, no movement is possible.
@@ -198,26 +240,31 @@ impl Cursor {
         // Convert char_idx to TextPosition.
         let new_line = buffer.content.char_to_line(char_idx);
         let line_start = buffer.content.line_to_char(new_line);
+
+        assert!(
+            line_start <= total_chars,
+            "New line start offset {} exceeds total characters {}",
+            line_start,
+            total_chars
+        );
+
         let new_col = char_idx - line_start;
         let new_pos = TextPosition::new(new_line, new_col, char_idx);
 
+        buffer.validate_position(&new_pos);
         self.set_position(new_pos, true);
-        
+
         Some(new_pos)
     }
 
     pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
-        assert!(
-            pos.line < buffer.content.len_lines(),
-            "Line index out of bounds: {} >= {}",
-            pos.line,
-            buffer.content.len_lines()
-        );
+        buffer.validate_position(&pos);
 
         let line = pos.line.min(buffer.content.len_lines().saturating_sub(1));
         let col = pos.col.min(buffer.grapheme_len(line));
         let off = buffer.grapheme_col_to_offset(line, col);
         let new_pos = TextPosition::new(line, col, off);
+        buffer.validate_position(&new_pos);
 
         self.set_position(new_pos, true);
 
