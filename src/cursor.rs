@@ -1,6 +1,7 @@
 use iced::Point;
 
 use super::buffer::Buffer;
+use crate::vim::VimMode;
 
 /// Represents the cursor state in the editor.
 #[derive(Clone)]
@@ -127,11 +128,15 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_right(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_right(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
-        if cur.col >= buffer.grapheme_len(cur.line) {
+        // In Normal mode, cursor can't go past the last character
+        // In Insert mode, cursor can go one position past the last character
+        let max_col = self.get_max_col(vim_mode, buffer, cur.line);
+        
+        if cur.col >= max_col {
             return None;
         }
 
@@ -145,7 +150,7 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_up(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_up(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -155,7 +160,9 @@ impl Cursor {
 
         let target_line = cur.line - 1;
         let target_col = self.get_preferred_column().unwrap_or(cur.col);
-        let new_col = target_col.min(buffer.grapheme_len(target_line));
+
+        let max_col = self.get_max_col(vim_mode, buffer, target_line);
+        let new_col = target_col.min(max_col);
         let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
 
@@ -165,7 +172,7 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_down(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_down(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -175,7 +182,9 @@ impl Cursor {
 
         let target_line = cur.line + 1;
         let target_col = self.get_preferred_column().unwrap_or(cur.col);
-        let new_col = target_col.min(buffer.grapheme_len(target_line));
+
+        let max_col = self.get_max_col(vim_mode, buffer, target_line);
+        let new_col = target_col.min(max_col);
         let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
 
@@ -260,31 +269,31 @@ impl Cursor {
     pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
         let cur = self.position();
-    
+
         buffer.validate_position(&cur);
-    
+
         let line_start = buffer.content.line_to_char(cur.line);
-    
+
         assert!(
             line_start <= total_chars,
             "Line start offset {} exceeds total characters {}",
             line_start,
             total_chars
         );
-    
+
         let mut char_idx = line_start + cur.col;
-    
+
         if char_idx == 0 {
             return None;
         }
-    
+
         // Move the cursor one step back to start looking at the previous character.
         char_idx = char_idx.saturating_sub(1);
-    
+
         // Get the current character and it's class.
         let c = buffer.content.char(char_idx);
         let current_class = get_char_class(c, big_word);
-    
+
         // Skip any trailing whitespace.
         while char_idx > 0 {
             let c = buffer.content.char(char_idx);
@@ -295,11 +304,11 @@ impl Cursor {
                 break;
             }
         }
-    
+
         // Skip all characters that are of the same class.
         while char_idx > 0 {
             let c = buffer.content.char(char_idx);
-            let class = get_char_class(c, big_word); 
+            let class = get_char_class(c, big_word);
             if class == current_class {
                 char_idx = char_idx.saturating_sub(1);
             } else {
@@ -308,7 +317,7 @@ impl Cursor {
                 break;
             }
         }
-    
+
         while char_idx > 0 {
             let c = buffer.content.char(char_idx);
             let class = get_char_class(c, big_word);
@@ -318,31 +327,31 @@ impl Cursor {
                 break;
             }
         }
-    
+
         let new_line = buffer.content.char_to_line(char_idx);
         let new_line_start = buffer.content.line_to_char(new_line);
         let new_col = char_idx - new_line_start;
         let new_pos = TextPosition::new(new_line, new_col, char_idx);
-    
+
         buffer.validate_position(&new_pos);
         self.set_position(new_pos, true);
-    
-        Some(new_pos)    
+
+        Some(new_pos)
     }
 
     pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
         let cur = self.position();
-        
+
         buffer.validate_position(&cur);
-        
+
         let line_start = buffer.content.line_to_char(cur.line);
         let mut char_idx = line_start + cur.col;
-        
+
         if char_idx >= total_chars {
             return None;
         }
-        
+
         // Move forward one character if possible.
         if char_idx + 1 < total_chars {
             char_idx += 1;
@@ -350,7 +359,7 @@ impl Cursor {
             // We're at the end of the buffer.
             return None;
         }
-        
+
         // Skip over whitespace.
         while char_idx < total_chars {
             let c = buffer.content.char(char_idx);
@@ -360,14 +369,14 @@ impl Cursor {
                 break;
             }
         }
-        
+
         if char_idx >= total_chars {
             return None;
         }
-        
+
         let current_class = get_char_class(buffer.content.char(char_idx), big_word);
         let mut last_char_index = char_idx;
-        
+
         // Move to the end of the current class sequence.
         while char_idx < total_chars {
             let c = buffer.content.char(char_idx);
@@ -378,16 +387,16 @@ impl Cursor {
                 break;
             }
         }
-        
+
         // Convert char index back to TextPosition
         let new_line = buffer.content.char_to_line(last_char_index);
         let new_line_start = buffer.content.line_to_char(new_line);
         let new_col = last_char_index - new_line_start;
         let new_pos = TextPosition::new(new_line, new_col, last_char_index);
-        
+
         buffer.validate_position(&new_pos);
         self.set_position(new_pos, true);
-        
+
         Some(new_pos)
     }
 
@@ -430,6 +439,35 @@ impl Cursor {
                 preferred_column, ..
             } => *preferred_column,
             _ => None,
+        }
+    }
+
+    pub fn adjust_for_mode(&mut self, buffer: &Buffer, vim_mode: &VimMode) {
+        let cur = self.position();
+
+        if let VimMode::Normal = vim_mode {
+            let line_len = buffer.grapheme_len(cur.line);
+            if line_len > 0 && cur.col >= line_len {
+                // Move cursor back to the last character.
+                let new_col = line_len - 1;
+                let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
+                let new_pos = TextPosition::new(cur.line, new_col, new_off);
+                self.set_position(new_pos, true);
+            }
+        }
+    }
+
+    fn get_max_col(&self, vim_mode: &VimMode, buffer: &Buffer, target: usize) -> usize {
+        match vim_mode {
+            VimMode::Normal => {
+                let line_len = buffer.grapheme_len(target);
+                if line_len == 0 {
+                    0
+                } else {
+                    line_len - 1
+                }
+            }
+            VimMode::Insert => buffer.grapheme_len(target),
         }
     }
 }

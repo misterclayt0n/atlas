@@ -398,7 +398,7 @@ where
                     translate_to_keyevent(&key, &text).and_then(|ke| self.vim.handle_key(ke));
 
                 if let Some(action) = maybe_action {
-                    crate::vim::execute(action, &mut self.buffer, &mut self.cursor);
+                    crate::vim::execute(action, &mut self.buffer, &mut self.cursor, &self.vim.mode);
                     self.ensure_cursor_visible(editor_state.bounds, char_width, line_height);
                     return event::Status::Captured;
                 }

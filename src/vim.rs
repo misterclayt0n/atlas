@@ -245,32 +245,36 @@ pub enum KeyEvent {
     Enter,
 }
 
-pub fn execute(action: VimAction, buffer: &mut Buffer, cursor: &mut Cursor) {
+pub fn execute(action: VimAction, buffer: &mut Buffer, cursor: &mut Cursor, vim_mode: &VimMode) {
     match action {
         VimAction::InsertChar(c) => buffer.insert_char(cursor, c),
         VimAction::InsertText(s) => buffer.insert_text(cursor, s.as_str()),
-        VimAction::Move { motion, .. } => apply_motion(motion, buffer, cursor),
+        VimAction::Move { motion, .. } => apply_motion(motion, buffer, cursor, vim_mode),
         VimAction::Operate { .. } => println!("Todo!"),
-        VimAction::ChangeMode(_) | VimAction::RepeatLast => println!("Handled by engine"),
+        VimAction::ChangeMode(new_mode) => {
+            // Adjust cursor position when switching modes
+            cursor.adjust_for_mode(buffer, &new_mode);
+        },
+        VimAction::RepeatLast => println!("Handled by engine"),
         VimAction::Backspace => buffer.backspace(cursor),
         VimAction::InsertNewline => buffer.insert_newline(cursor),
         VimAction::Delete => buffer.delete(cursor)
     }
 }
 
-fn apply_motion(motion: Motion, buffer: &Buffer, cursor: &mut Cursor) {
+fn apply_motion(motion: Motion, buffer: &Buffer, cursor: &mut Cursor, vim_mode: &VimMode) {
     match motion {
         Motion::CharLeft => {
             cursor.move_left(buffer);
         }
         Motion::CharRight => {
-            cursor.move_right(buffer);
+            cursor.move_right(buffer, vim_mode);
         }
         Motion::CharUp => {
-            cursor.move_up(buffer);
+            cursor.move_up(buffer, vim_mode);
         }
         Motion::CharDown => {
-            cursor.move_down(buffer);
+            cursor.move_down(buffer, vim_mode);
         }
         Motion::NextWordStart(big_word) => {
             cursor.move_word_forward(buffer, big_word);
@@ -286,6 +290,6 @@ fn apply_motion(motion: Motion, buffer: &Buffer, cursor: &mut Cursor) {
         }
         Motion::_ToLineEnd => {
             println!("Line end");
-        } // …
+        }
     }
 }
