@@ -330,6 +330,67 @@ impl Cursor {
         Some(new_pos)    
     }
 
+    pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+        let total_chars = buffer.content.len_chars();
+        let cur = self.position();
+        
+        buffer.validate_position(&cur);
+        
+        let line_start = buffer.content.line_to_char(cur.line);
+        let mut char_idx = line_start + cur.col;
+        
+        if char_idx >= total_chars {
+            return None;
+        }
+        
+        // Move forward one character if possible.
+        if char_idx + 1 < total_chars {
+            char_idx += 1;
+        } else {
+            // We're at the end of the buffer.
+            return None;
+        }
+        
+        // Skip over whitespace.
+        while char_idx < total_chars {
+            let c = buffer.content.char(char_idx);
+            if get_char_class(c, big_word) == CharClass::Whitespace {
+                char_idx += 1;
+            } else {
+                break;
+            }
+        }
+        
+        if char_idx >= total_chars {
+            return None;
+        }
+        
+        let current_class = get_char_class(buffer.content.char(char_idx), big_word);
+        let mut last_char_index = char_idx;
+        
+        // Move to the end of the current class sequence.
+        while char_idx < total_chars {
+            let c = buffer.content.char(char_idx);
+            if get_char_class(c, big_word) == current_class {
+                last_char_index = char_idx;
+                char_idx += 1;
+            } else {
+                break;
+            }
+        }
+        
+        // Convert char index back to TextPosition
+        let new_line = buffer.content.char_to_line(last_char_index);
+        let new_line_start = buffer.content.line_to_char(new_line);
+        let new_col = last_char_index - new_line_start;
+        let new_pos = TextPosition::new(new_line, new_col, last_char_index);
+        
+        buffer.validate_position(&new_pos);
+        self.set_position(new_pos, true);
+        
+        Some(new_pos)
+    }
+
     pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
         buffer.validate_position(&pos);
 
