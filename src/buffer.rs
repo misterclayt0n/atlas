@@ -166,12 +166,13 @@ impl Buffer {
         cursor.move_to_position(new_pos, self);
     }
 
-    pub fn delete(&mut self, offset: usize) {
-        self.validate_offset(offset);
-        let end = self.next_grapheme_offset(offset);
-        self.validate_offset(end);
+    pub fn delete(&mut self, cursor: &mut Cursor) {
+        let pos = cursor.position();
+        self.validate_position(&pos);
+        let end = self.next_grapheme_offset(pos.offset);
+        self.validate_position(&pos);
 
-        self.content.remove(offset..end);
+        self.content.remove(pos.offset..end);
     }
 
     pub fn backspace(&mut self, cursor: &mut Cursor) {

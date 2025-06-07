@@ -65,6 +65,7 @@ pub enum VimAction {
     ChangeMode(VimMode),
     RepeatLast,
     Backspace,
+    Delete,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -125,6 +126,7 @@ impl Parser {
             // Esc
             '\u{1b}' => return Some(VimAction::ChangeMode(VimMode::Normal)),
             '.' => return Some(VimAction::RepeatLast),
+            'x' => return Some(VimAction::Delete),
             _ => {}
         }
 
@@ -246,6 +248,7 @@ pub fn execute(action: VimAction, buffer: &mut Buffer, cursor: &mut Cursor) {
         VimAction::ChangeMode(_) | VimAction::RepeatLast => println!("Handled by engine"),
         VimAction::Backspace => buffer.backspace(cursor),
         VimAction::InsertNewline => buffer.insert_newline(cursor),
+        VimAction::Delete => buffer.delete(cursor)
     }
 }
 
