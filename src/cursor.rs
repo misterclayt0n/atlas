@@ -257,6 +257,79 @@ impl Cursor {
         Some(new_pos)
     }
 
+    pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+        let total_chars = buffer.content.len_chars();
+        let cur = self.position();
+    
+        buffer.validate_position(&cur);
+    
+        let line_start = buffer.content.line_to_char(cur.line);
+    
+        assert!(
+            line_start <= total_chars,
+            "Line start offset {} exceeds total characters {}",
+            line_start,
+            total_chars
+        );
+    
+        let mut char_idx = line_start + cur.col;
+    
+        if char_idx == 0 {
+            return None;
+        }
+    
+        // Move the cursor one step back to start looking at the previous character.
+        char_idx = char_idx.saturating_sub(1);
+    
+        // Get the current character and it's class.
+        let c = buffer.content.char(char_idx);
+        let current_class = get_char_class(c, big_word);
+    
+        // Skip any trailing whitespace.
+        while char_idx > 0 {
+            let c = buffer.content.char(char_idx);
+            let class = get_char_class(c, big_word);
+            if class == current_class {
+                char_idx = char_idx.saturating_sub(1);
+            } else {
+                break;
+            }
+        }
+    
+        // Skip all characters that are of the same class.
+        while char_idx > 0 {
+            let c = buffer.content.char(char_idx);
+            let class = get_char_class(c, big_word); 
+            if class == current_class {
+                char_idx = char_idx.saturating_sub(1);
+            } else {
+                // Stop at the boundary between different character classes.
+                char_idx += 1;
+                break;
+            }
+        }
+    
+        while char_idx > 0 {
+            let c = buffer.content.char(char_idx);
+            let class = get_char_class(c, big_word);
+            if class == CharClass::Whitespace {
+                char_idx = char_idx.saturating_sub(1);
+            } else {
+                break;
+            }
+        }
+    
+        let new_line = buffer.content.char_to_line(char_idx);
+        let new_line_start = buffer.content.line_to_char(new_line);
+        let new_col = char_idx - new_line_start;
+        let new_pos = TextPosition::new(new_line, new_col, char_idx);
+    
+        buffer.validate_position(&new_pos);
+        self.set_position(new_pos, true);
+    
+        Some(new_pos)    
+    }
+
     pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
         buffer.validate_position(&pos);
 
