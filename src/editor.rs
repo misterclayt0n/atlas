@@ -155,7 +155,7 @@ impl Editor {
         layout: iced::advanced::Layout<'_>,
     ) {
         let cursor_bounds = match self.vim.mode {
-            VimMode::Normal => Rectangle {
+            VimMode::Normal | VimMode::Visual => Rectangle {
                 x: position.x,
                 y: position.y,
                 width: char_width, // Block, basically.
@@ -178,12 +178,12 @@ impl Editor {
             };
 
         let cursor_background = match self.vim.mode {
-            VimMode::Normal => Color::WHITE,
+            VimMode::Normal | VimMode::Visual => Color::WHITE,
             VimMode::Insert => Color::WHITE,
         };
 
         let text_color = match self.vim.mode {
-            VimMode::Normal => Color::BLACK,
+            VimMode::Normal | VimMode::Visual => Color::BLACK,
             _ => Color::WHITE,
         };
 
@@ -213,6 +213,86 @@ impl Editor {
                 text_color,
                 layout.bounds(),
             )
+        }
+    }
+
+    /// Draws the visual selection background.
+    fn draw_selection(
+        &self,
+        renderer: &mut impl iced::advanced::text::Renderer,
+        bounds: Rectangle,
+        char_width: f32,
+        line_height: f32,
+    ) {
+        if let Some((start, end)) = self.cursor.get_selection() {
+            // Selection color.
+            let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
+
+            if start.line == end.line {
+                // Single line selection
+                let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
+                let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
+                let mut width = (end.col - start.col) as f32 * char_width;
+                
+                // Ensure minimum width for empty selections (like newlines)
+                if width < char_width * 0.5 {
+                    width = char_width * 0.5;
+                }
+
+                let selection_bounds = Rectangle {
+                    x: start_x,
+                    y: start_y,
+                    width,
+                    height: line_height,
+                };
+
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: selection_bounds,
+                        ..Default::default()
+                    },
+                    selection_color,
+                );
+            } else {
+                // Multi-line selection
+                for line in start.line..=end.line {
+                    let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
+
+                    let (start_col, end_col) = if line == start.line {
+                        // First line: from start position to end of line
+                        (start.col, self.buffer.grapheme_len(line))
+                    } else if line == end.line {
+                        // Last line: from beginning to end position
+                        (0, end.col)
+                    } else {
+                        // Middle lines: entire line
+                        (0, self.buffer.grapheme_len(line))
+                    };
+
+                    let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
+                    let mut width = (end_col - start_col) as f32 * char_width;
+                    
+                    // For empty lines or zero-width selections, show at least a small highlight
+                    if width < char_width * 0.5 {
+                        width = char_width * 0.5;
+                    }
+
+                    let selection_bounds = Rectangle {
+                        x: start_x,
+                        y: line_y,
+                        width,
+                        height: line_height,
+                    };
+
+                    renderer.fill_quad(
+                        renderer::Quad {
+                            bounds: selection_bounds,
+                            ..Default::default()
+                        },
+                        selection_color,
+                    );
+                }
+            }
         }
     }
 }
@@ -300,6 +380,9 @@ where
         // Calculate visible column range.
         let first_col = (self.scroll_offset.x / char_w).floor() as usize;
         let visible_cols = (bounds.width / char_w).ceil() as usize;
+
+        // Draw selection background.
+        self.draw_selection(renderer, bounds, char_w, line_height);
 
         // Render each visible line.
         for line_idx in first_line..end_line {

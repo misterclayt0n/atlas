@@ -1,7 +1,6 @@
 // TODO: Vim bindings. -> At least the basics.
 // TODO: File loading/saving.
 // TODO: Command mode.
-// TODO: Visual mode.
 // TODO: Multiple buffer support - Buffer management.
 // TODO: Status line.
 // TODO: Line number.
@@ -11,6 +10,14 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
+// REFACTOR: The way we currently define motions is not good nor declarative enough.
+//           We could solve this by introducing some sort of data structure that describes a motion (Keymap seems nice).
+//           I want something as simple as:
+//           keymap.set(VimMode::Normal, "3j", Motion::Down(3));
+//           keymap.set(VimMode::Normal, "gd", go_to_definition);
+//           keymap.set(VimMode::Normal, "gr", replace_under_cursor);
+//           keymap.set(VimMode::Normal, "j", Motion::Down);
+//           etc.
 
 use editor::Editor;
 use iced::Element;

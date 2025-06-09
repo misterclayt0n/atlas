@@ -24,7 +24,6 @@ impl Motion {
             'k' => Motion::CharUp,
             'l' => Motion::CharRight,
             'w' => Motion::NextWordStart(false),
-            // FIX: 'W' ain't working.
             'W' => Motion::NextWordStart(true),
             'b' => Motion::PrevWord(false),
             'B' => Motion::PrevWord(true),
@@ -78,7 +77,7 @@ pub enum VimAction {
 pub enum VimMode {
     Normal,
     Insert,
-    // Visual,
+    Visual,
 }
 
 #[derive(Default, Clone)]
@@ -106,7 +105,7 @@ impl Parser {
                 let count = self.count.take().unwrap_or(1);
                 return Some(VimAction::Operate {
                     _op: pending,
-                    _motion: Motion::ToLineStart, // Shorthand: dd == d d
+                    _motion: Motion::ToLineStart, // Shorthand: dd == d d.
                     _count: count,
                 });
             }
@@ -115,7 +114,7 @@ impl Parser {
             return None;
         }
 
-        // Motions
+        // Motions.
         if let Some(motion) = Motion::from_hjkl(c) {
             if let Some(op) = self.pending_op.take() {
                 let count = self.count.take().unwrap_or(1);
@@ -129,6 +128,7 @@ impl Parser {
         // Insert / Esc.
         match c {
             'i' => return Some(VimAction::ChangeMode(VimMode::Insert)),
+            'v' => return Some(VimAction::ChangeMode(VimMode::Visual)),
             // Esc
             '\u{1b}' => return Some(VimAction::ChangeMode(VimMode::Normal)),
             '.' => return Some(VimAction::RepeatLast),
@@ -220,6 +220,39 @@ impl VimEngine {
                             }
                         }
                     }
+                }
+
+                None
+            }
+
+            Visual => {
+                if let KeyEvent::Key { ref key, .. } = key {
+                    if let Key::Character(s) = key {
+                        if s.len() == 1 {
+                            let c = s.chars().next().unwrap();
+                            
+                            // Handle movement in visual mode just like we do in normal mode.
+                            if let Some(motion) = Motion::from_hjkl(c) {
+                                return Some(VimAction::Move { motion, _count: 1 });
+                            }
+                            
+                            // Handle operators in visual mode, also just like we do it in normal mode.
+                            if let Some(op) = Operator::from_char(c) {
+                                // In visual mode, operators work on the selection.
+                                self.mode = Normal;
+                                return Some(VimAction::Operate {
+                                    _op: op,
+                                    _motion: Motion::CharRight, // Placeholder - will use selection.
+                                    _count: 1,
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                if let KeyEvent::Esc = key {
+                    self.mode = Normal;
+                    return Some(VimAction::ChangeMode(Normal));
                 }
 
                 None

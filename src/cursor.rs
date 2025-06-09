@@ -3,18 +3,22 @@ use iced::Point;
 use super::buffer::Buffer;
 use crate::vim::VimMode;
 
+#[derive(Clone)]
+pub struct Cursor {
+    state: CursorState,
+    preferred_column: Option<usize>, // Global preferred column for all modes.
+}
+
 /// Represents the cursor state in the editor.
 #[derive(Clone)]
-pub enum Cursor {
-    // NOTE: Is this vim-mode agnostic?
-    /// Single cursor position
+enum CursorState {
+    /// Single cursor position.
     Normal {
         position: TextPosition,
-        preferred_column: Option<usize>, // For maintaining column position during vertical movements.
     },
 
     /// Text selection with start and end positions.
-    _Selection {
+    Selection {
         anchor: TextPosition, // Where it starts.
         active: TextPosition, // Where it is currently.
     },
@@ -50,17 +54,17 @@ fn get_char_class(c: char, big_word: bool) -> CharClass {
 impl Cursor {
     pub fn new() -> Self {
         // This never starts with selection.
-        Self::Normal {
-            position: TextPosition::default(),
+        Self {
+            state: CursorState::Normal { position: TextPosition::default() },
             preferred_column: None,
         }
     }
 
     /// Get the current position regardless of the cursor type
     pub fn position(&self) -> TextPosition {
-        match self {
-            Self::Normal { position, .. } => *position,
-            Self::_Selection { active, .. } => *active,
+        match &self.state {
+            CursorState::Normal { position } => *position,
+            CursorState::Selection { active, .. } => *active,
         }
     }
 
@@ -82,9 +86,9 @@ impl Cursor {
     }
 
     /// Start selection from current position.
-    pub fn _start_selection(&mut self) {
-        if let Self::Normal { position, .. } = *self {
-            *self = Self::_Selection {
+    pub fn start_selection(&mut self) {
+        if let CursorState::Normal { position } = self.state {
+            self.state = CursorState::Selection {
                 anchor: position,
                 active: position,
             };
@@ -94,14 +98,38 @@ impl Cursor {
     }
 
     /// Clear any active selection.
-    pub fn _clear_selection(&mut self) {
-        if let Self::_Selection { active, .. } = *self {
-            *self = Self::Normal {
-                position: active,
-                preferred_column: None,
-            };
+    pub fn clear_selection(&mut self) {
+        if let CursorState::Selection { active, .. } = self.state {
+            self.state = CursorState::Normal { position: active };
         } else {
             assert!(false, "clear_selection called on non normal cursor");
+        }
+    }
+
+    /// Check if cursor is in selection mode.
+    pub fn has_selection(&self) -> bool {
+        matches!(&self.state, CursorState::Selection { .. })
+    }
+
+    /// Get selection range if in selection mode.
+    pub fn get_selection(&self) -> Option<(TextPosition, TextPosition)> {
+        if let CursorState::Selection { anchor, active } = &self.state {
+            // NOTE: In visual mode, selection is always inclusive of both anchor and active positions.
+            // That's why we adjust the end position to include the character under the cursor.
+            let (start, mut end) = if anchor.offset <= active.offset {
+                (*anchor, *active)
+            } else {
+                (*active, *anchor)
+            };
+            
+            // Make the selection inclusive by extending the end position by 1.
+            // This ensures the character under the cursor is always highlighted.
+            end.col += 1;
+            end.offset += 1;
+            
+            Some((start, end))
+        } else {
+            None
         }
     }
 
@@ -159,7 +187,7 @@ impl Cursor {
         }
 
         let target_line = cur.line - 1;
-        let target_col = self.get_preferred_column().unwrap_or(cur.col);
+        let target_col = self.preferred_column.unwrap_or(cur.col);
 
         let max_col = self.get_max_col(vim_mode, buffer, target_line);
         let new_col = target_col.min(max_col);
@@ -181,7 +209,7 @@ impl Cursor {
         }
 
         let target_line = cur.line + 1;
-        let target_col = self.get_preferred_column().unwrap_or(cur.col);
+        let target_col = self.preferred_column.unwrap_or(cur.col);
 
         let max_col = self.get_max_col(vim_mode, buffer, target_line);
         let new_col = target_col.min(max_col);
@@ -419,47 +447,55 @@ impl Cursor {
     //
 
     fn set_position(&mut self, pos: TextPosition, update_preferred_col: bool) {
-        match self {
-            Self::Normal {
-                position,
-                preferred_column,
-            } => {
+        match &mut self.state {
+            CursorState::Normal { position } => {
                 *position = pos;
                 if update_preferred_col {
-                    *preferred_column = Some(pos.col)
+                    self.preferred_column = Some(pos.col)
                 }
             }
-            Self::_Selection { active, .. } => *active = pos,
-        }
-    }
-
-    fn get_preferred_column(&self) -> Option<usize> {
-        match self {
-            Self::Normal {
-                preferred_column, ..
-            } => *preferred_column,
-            _ => None,
+            CursorState::Selection { active, .. } => {
+                *active = pos;
+                if update_preferred_col {
+                    self.preferred_column = Some(pos.col)
+                }
+            }
         }
     }
 
     pub fn adjust_for_mode(&mut self, buffer: &Buffer, vim_mode: &VimMode) {
-        let cur = self.position();
-
-        if let VimMode::Normal = vim_mode {
-            let line_len = buffer.grapheme_len(cur.line);
-            if line_len > 0 && cur.col >= line_len {
-                // Move cursor back to the last character.
-                let new_col = line_len - 1;
-                let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
-                let new_pos = TextPosition::new(cur.line, new_col, new_off);
-                self.set_position(new_pos, true);
+        match vim_mode {
+            VimMode::Normal => {
+                // Clear selection when entering Normal mode.
+                if self.has_selection() {
+                    self.clear_selection();
+                }
+                
+                let cur = self.position();
+                let line_len = buffer.grapheme_len(cur.line);
+                if line_len > 0 && cur.col >= line_len {
+                    // Move cursor back to the last character.
+                    let new_col = line_len - 1;
+                    let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
+                    let new_pos = TextPosition::new(cur.line, new_col, new_off);
+                    self.set_position(new_pos, true);
+                }
+            }
+            VimMode::Insert => {
+                // Clear selection when entering Insert mode.
+                if self.has_selection() {
+                    self.clear_selection();
+                }
+            }
+            VimMode::Visual => {
+                // NOTE: Visual mode keeps current cursor position and selection, so we don't need to adjust anything.
             }
         }
     }
 
     fn get_max_col(&self, vim_mode: &VimMode, buffer: &Buffer, target: usize) -> usize {
         match vim_mode {
-            VimMode::Normal => {
+            VimMode::Normal | VimMode::Visual => {
                 let line_len = buffer.grapheme_len(target);
                 if line_len == 0 {
                     0
