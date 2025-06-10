@@ -488,7 +488,10 @@ impl Cursor {
                 }
             }
             VimMode::Visual => {
-                // NOTE: Visual mode keeps current cursor position and selection, so we don't need to adjust anything.
+                // Start selection when entering Visual mode if we don't already have one.
+                if !self.has_selection() {
+                    self.start_selection();
+                }
             }
         }
     }
