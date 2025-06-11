@@ -1,9 +1,12 @@
-[package]
-name = "atlas"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["atlas", "atlas-engine", "atlas-vim", "atlas-widgets"] 
+resolver = "3"
 
-[dependencies]
+[workspace.dependencies]
+atlas-engine   = { path = "atlas-engine" }
+atlas-vim      = { path = "atlas-vim" }
+atlas-widgets  = { path = "atlas-widgets" }
+
 iced = { version = "0.13.1", features = ["canvas", "debug", "advanced"]}
 iced_graphics = "0.13"
 ropey = "1.6.1"

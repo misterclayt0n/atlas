@@ -1,3 +1,5 @@
+use atlas_engine::{Buffer, Cursor, Message, VimMode};
+use atlas_vim::{execute, KeyEvent, VimEngine};
 use iced::{
     advanced::{
         graphics::core::{event, widget},
@@ -12,13 +14,6 @@ use iced::{
     Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
 };
 use iced_graphics::{core::SmolStr, text::Paragraph};
-
-use crate::{
-    buffer::Buffer,
-    cursor::Cursor,
-    vim::{KeyEvent, VimEngine, VimMode},
-    Message,
-};
 
 /// Custom widget that handles the visual representation of text content.
 /// Responsible for rendering text, cursor, and handling visual aspects.
@@ -481,7 +476,7 @@ where
                     translate_to_keyevent(&key, &text).and_then(|ke| self.vim.handle_key(ke));
 
                 if let Some(action) = maybe_action {
-                    crate::vim::execute(action, &mut self.buffer, &mut self.cursor, &self.vim.mode);
+                    execute(action, &mut self.buffer, &mut self.cursor, &self.vim.mode);
                     self.ensure_cursor_visible(editor_state.bounds, char_width, line_height);
                     return event::Status::Captured;
                 }

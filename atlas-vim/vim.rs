@@ -1,7 +1,5 @@
+use atlas_engine::{Buffer, Cursor, VimMode};
 use iced::keyboard::{self, Key};
-
-use crate::buffer::Buffer;
-use crate::cursor::Cursor;
 
 #[derive(Clone)]
 pub enum Motion {
@@ -71,13 +69,6 @@ pub enum VimAction {
     RepeatLast,
     Backspace,
     Delete,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VimMode {
-    Normal,
-    Insert,
-    Visual,
 }
 
 #[derive(Default, Clone)]

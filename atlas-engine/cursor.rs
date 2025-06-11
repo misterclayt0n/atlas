@@ -1,7 +1,7 @@
 use iced::Point;
 
+use crate::VimMode;
 use super::buffer::Buffer;
-use crate::vim::VimMode;
 
 #[derive(Clone)]
 pub struct Cursor {
@@ -121,12 +121,12 @@ impl Cursor {
             } else {
                 (*active, *anchor)
             };
-            
+
             // Make the selection inclusive by extending the end position by 1.
             // This ensures the character under the cursor is always highlighted.
             end.col += 1;
             end.offset += 1;
-            
+
             Some((start, end))
         } else {
             None
@@ -163,7 +163,7 @@ impl Cursor {
         // In Normal mode, cursor can't go past the last character
         // In Insert mode, cursor can go one position past the last character
         let max_col = self.get_max_col(vim_mode, buffer, cur.line);
-        
+
         if cur.col >= max_col {
             return None;
         }
@@ -470,7 +470,7 @@ impl Cursor {
                 if self.has_selection() {
                     self.clear_selection();
                 }
-                
+
                 let cur = self.position();
                 let line_len = buffer.grapheme_len(cur.line);
                 if line_len > 0 && cur.col >= line_len {

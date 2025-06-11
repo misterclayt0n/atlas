@@ -19,19 +19,9 @@
 //           keymap.set(VimMode::Normal, "j", Motion::Down);
 //           etc.
 
-use editor::Editor;
+use atlas_engine::Message;
+use atlas_widgets::editor::Editor;
 use iced::Element;
-
-mod buffer;
-mod cursor;
-mod editor;
-mod vim;
-
-#[derive(Debug, Clone)]
-/// Represents possible actions that can be performed in the editor.
-pub enum Message {
-    Quit,
-}
 
 /// Main application structure.
 /// Manages the overall editor state and handles high-level operations.

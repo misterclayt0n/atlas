@@ -1,0 +1,13 @@
+[package]
+name    = "atlas-widgets"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+iced.workspace          = true
+iced_graphics.workspace = true
+atlas-engine.workspace  = true
+atlas-vim.workspace     = true
