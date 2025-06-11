@@ -1,7 +1,9 @@
 use atlas_engine::{Buffer, Cursor, VimMode};
 use iced::keyboard::{self, Key};
 
-#[derive(Clone)]
+use crate::keymap::Keymap;
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Motion {
     CharLeft,
     CharRight,
@@ -11,7 +13,7 @@ pub enum Motion {
     _ToLineEnd,
     NextWordStart(bool), // NOTE: Boolean value to represent if it's a big word or not.
     NextWordEnd(bool),
-    PrevWord(bool)
+    PrevWord(bool),
 }
 
 impl Motion {
@@ -32,7 +34,7 @@ impl Motion {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Operator {
     Delete,
     Yank,
@@ -51,14 +53,14 @@ impl Operator {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum VimAction {
     InsertChar(char),
     InsertText(String),
     InsertNewline,
     Move {
         motion: Motion,
-        _count: usize,
+        count: usize,
     },
     Operate {
         _op: Operator, // dw, 3yy, etc.
@@ -71,76 +73,10 @@ pub enum VimAction {
     Delete,
 }
 
-#[derive(Default, Clone)]
-pub struct Parser {
-    // Pending pieces for a Normal mode command.
-    count: Option<usize>,
-    pending_op: Option<Operator>,
-}
-
-impl Parser {
-    /// Feed a single key press and maybe get in return some vim action.
-    pub fn feed_key(&mut self, c: char) -> Option<VimAction> {
-        // Handle counts.
-        if c.is_ascii_digit() && !(c == '0' && self.count.is_none()) {
-            let d = c.to_digit(10).unwrap() as usize; // UNSAFE
-            self.count = Some(self.count.unwrap_or(0) * 10 + d);
-            return None;
-        }
-
-        // Operator?
-        if let Some(op) = Operator::from_char(c) {
-            // Repeat 'dd' : second 'd' completes command using implicit line motion.
-            if let Some(pending) = self.pending_op.take() {
-                println!("dd motherfucker");
-                let count = self.count.take().unwrap_or(1);
-                return Some(VimAction::Operate {
-                    _op: pending,
-                    _motion: Motion::ToLineStart, // Shorthand: dd == d d.
-                    _count: count,
-                });
-            }
-
-            self.pending_op = Some(op);
-            return None;
-        }
-
-        // Motions.
-        if let Some(motion) = Motion::from_hjkl(c) {
-            if let Some(op) = self.pending_op.take() {
-                let count = self.count.take().unwrap_or(1);
-                return Some(VimAction::Operate { _op: op, _motion: motion, _count: count });
-            }
-
-            let count = self.count.take().unwrap_or(1);
-            return Some(VimAction::Move { motion, _count: count });
-        }
-
-        // Insert / Esc.
-        match c {
-            'i' => return Some(VimAction::ChangeMode(VimMode::Insert)),
-            'v' => return Some(VimAction::ChangeMode(VimMode::Visual)),
-            // Esc
-            '\u{1b}' => return Some(VimAction::ChangeMode(VimMode::Normal)),
-            '.' => return Some(VimAction::RepeatLast),
-            'x' => return Some(VimAction::Delete),
-            _ => {}
-        }
-
-        self.reset();
-        None
-    }
-
-    pub fn reset(&mut self) {
-        self.count = None;
-        self.pending_op = None;
-    }
-}
-
 #[derive(Clone)]
 pub struct VimEngine {
     pub mode: VimMode,
-    parser: Parser,
+    keymap: Keymap,
     last_edit: Option<VimAction>, // For ".".
 }
 
@@ -148,7 +84,7 @@ impl Default for VimEngine {
     fn default() -> Self {
         Self {
             mode: VimMode::Normal,
-            parser: Parser::default(),
+            keymap: Keymap::new(),
             last_edit: None,
         }
     }
@@ -197,7 +133,7 @@ impl VimEngine {
                     if let Key::Character(s) = key {
                         if s.len() == 1 {
                             let c = s.chars().next().unwrap();
-                            if let Some(action) = self.parser.feed_key(c) {
+                            if let Some(action) = self.keymap.handle_key(&self.mode, c, None) {
                                 if matches!(
                                     action,
                                     VimAction::InsertChar(_) | VimAction::Operate { .. }
@@ -221,12 +157,12 @@ impl VimEngine {
                     if let Key::Character(s) = key {
                         if s.len() == 1 {
                             let c = s.chars().next().unwrap();
-                            
+
                             // Handle movement in visual mode just like we do in normal mode.
                             if let Some(motion) = Motion::from_hjkl(c) {
-                                return Some(VimAction::Move { motion, _count: 1 });
+                                return Some(VimAction::Move { motion, count: 1 });
                             }
-                            
+
                             // Handle operators in visual mode, also just like we do it in normal mode.
                             if let Some(op) = Operator::from_char(c) {
                                 // In visual mode, operators work on the selection.
@@ -240,7 +176,7 @@ impl VimEngine {
                         }
                     }
                 }
-                
+
                 if let KeyEvent::Esc = key {
                     self.mode = Normal;
                     return Some(VimAction::ChangeMode(Normal));
@@ -253,6 +189,12 @@ impl VimEngine {
 
     pub fn _repeat_last(&self) -> Option<VimAction> {
         self.last_edit.clone()
+    }
+
+    /// Count handling
+    pub fn has_pending_count(&self) -> bool {
+        // TODO: Implement count handling in keymap.
+        false
     }
 }
 
@@ -278,11 +220,11 @@ pub fn execute(action: VimAction, buffer: &mut Buffer, cursor: &mut Cursor, vim_
         VimAction::ChangeMode(new_mode) => {
             // Adjust cursor position when switching modes
             cursor.adjust_for_mode(buffer, &new_mode);
-        },
+        }
         VimAction::RepeatLast => println!("Handled by engine"),
         VimAction::Backspace => buffer.backspace(cursor),
         VimAction::InsertNewline => buffer.insert_newline(cursor),
-        VimAction::Delete => buffer.delete(cursor)
+        VimAction::Delete => buffer.delete(cursor),
     }
 }
 

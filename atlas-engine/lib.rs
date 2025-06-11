@@ -4,7 +4,7 @@ pub mod cursor;
 pub use buffer::Buffer;
 pub use cursor::{Cursor, TextPosition};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VimMode {
     Normal,
     Insert,

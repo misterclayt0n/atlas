@@ -1,4 +1,4 @@
-// TODO: Vim bindings. -> At least the basics.
+// TODO: Vim operators -> "dd" is a good start but we should stop there and move on for now.
 // TODO: File loading/saving.
 // TODO: Command mode.
 // TODO: Multiple buffer support - Buffer management.
@@ -10,14 +10,6 @@
 // TODO: LSP.
 // TODO: Advanced vim features.
 // TODO?: Completion engine.
-// REFACTOR: The way we currently define motions is not good nor declarative enough.
-//           We could solve this by introducing some sort of data structure that describes a motion (Keymap seems nice).
-//           I want something as simple as:
-//           keymap.set(VimMode::Normal, "3j", Motion::Down(3));
-//           keymap.set(VimMode::Normal, "gd", go_to_definition);
-//           keymap.set(VimMode::Normal, "gr", replace_under_cursor);
-//           keymap.set(VimMode::Normal, "j", Motion::Down);
-//           etc.
 
 use atlas_engine::Message;
 use atlas_widgets::editor::Editor;
