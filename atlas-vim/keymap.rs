@@ -111,6 +111,10 @@ impl Keymap {
         self.set(Normal, "y", KeyOperator(Operator::Yank));
         self.set(Normal, "c", KeyOperator(Operator::Change));
 
+        // Testing multiple cursors.
+        self.set(Normal, "C", Command(VimAction::AddCursor));
+        self.set(Normal, "R", Command(VimAction::RemoveSecondaryCursors));
+
         // Multi-key bindings.
         self.set(
             Normal,

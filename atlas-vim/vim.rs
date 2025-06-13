@@ -1,4 +1,4 @@
-use atlas_engine::{Buffer, Cursor, VimMode};
+use atlas_engine::{Buffer, VimMode, MultiCursor};
 use iced::keyboard::{self, Key};
 
 use crate::keymap::Keymap;
@@ -71,6 +71,8 @@ pub enum VimAction {
     RepeatLast,
     Backspace,
     Delete,
+    AddCursor, // NOTE: This is likely just mocked.
+    RemoveSecondaryCursors,
 }
 
 #[derive(Clone)]
@@ -211,51 +213,63 @@ pub enum KeyEvent {
     Enter,
 }
 
-pub fn execute(action: VimAction, buffer: &mut Buffer, cursor: &mut Cursor, vim_mode: &VimMode) {
+pub fn execute(action: VimAction, buffer: &mut Buffer, multi_cursor: &mut MultiCursor, vim_mode: &VimMode) {
     match action {
-        VimAction::InsertChar(c) => buffer.insert_char(cursor, c),
-        VimAction::InsertText(s) => buffer.insert_text(cursor, s.as_str()),
-        VimAction::Move { motion, .. } => apply_motion(motion, buffer, cursor, vim_mode),
+        VimAction::InsertChar(c) => buffer.insert_char(multi_cursor, c),
+        VimAction::InsertText(s) => buffer.insert_text(multi_cursor, s.as_str()),
+        VimAction::Move { motion, .. } => apply_motion(motion, buffer, multi_cursor, vim_mode),
         VimAction::Operate { .. } => println!("Todo!"),
-        VimAction::ChangeMode(new_mode) => {
-            // Adjust cursor position when switching modes
-            cursor.adjust_for_mode(buffer, &new_mode);
-        }
+        VimAction::ChangeMode(new_mode) => multi_cursor.adjust_for_mode(buffer, &new_mode),
         VimAction::RepeatLast => println!("Handled by engine"),
-        VimAction::Backspace => buffer.backspace(cursor),
-        VimAction::InsertNewline => buffer.insert_newline(cursor),
-        VimAction::Delete => buffer.delete(cursor),
+        VimAction::Backspace => buffer.backspace(multi_cursor),
+        VimAction::InsertNewline => buffer.insert_newline(multi_cursor),
+        VimAction::Delete => buffer.delete(multi_cursor),
+        
+        // MOCKED
+        VimAction::AddCursor => {
+            // Add a cursor one line below the primary cursor, or to the right if at last line.
+            let current_pos = multi_cursor.position();
+            let total_lines = buffer.content.len_lines();
+
+            let new_pos = if current_pos.line + 1 < total_lines {
+                // Move to next line, same column (or end of line if shorter).
+                let next_line = current_pos.line + 1;
+                let line_len = buffer.grapheme_len(next_line);
+                let new_col = current_pos.col.min(line_len);
+                let new_offset = buffer.grapheme_col_to_offset(next_line, new_col);
+
+                atlas_engine::TextPosition::new(next_line, new_col, new_offset)
+            } else {
+                // At last line, try to move right instead.
+                let line_len = buffer.grapheme_len(current_pos.line);
+                if current_pos.col < line_len {
+                    let new_col = current_pos.col + 1;
+                    let new_offset = buffer.grapheme_col_to_offset(current_pos.line, new_col);
+                    atlas_engine::TextPosition::new(current_pos.line, new_col, new_offset)
+                } else {
+                    // Can't add cursor anywhere, just return without adding.
+                    return;
+                }
+            };
+
+            buffer.validate_position(&new_pos);
+            multi_cursor.add_cursor(new_pos, buffer);
+        },
+        
+        VimAction::RemoveSecondaryCursors => multi_cursor.clear_secondary_cursors(),
     }
 }
 
-fn apply_motion(motion: Motion, buffer: &Buffer, cursor: &mut Cursor, vim_mode: &VimMode) {
+fn apply_motion(motion: Motion, buffer: &Buffer, multi_cursor: &mut MultiCursor, vim_mode: &VimMode) {
     match motion {
-        Motion::CharLeft => {
-            cursor.move_left(buffer);
-        }
-        Motion::CharRight => {
-            cursor.move_right(buffer, vim_mode);
-        }
-        Motion::CharUp => {
-            cursor.move_up(buffer, vim_mode);
-        }
-        Motion::CharDown => {
-            cursor.move_down(buffer, vim_mode);
-        }
-        Motion::NextWordStart(big_word) => {
-            cursor.move_word_forward(buffer, big_word);
-        }
-        Motion::PrevWord(big_word) => {
-            cursor.move_word_backward(buffer, big_word);
-        }
-        Motion::NextWordEnd(big_word) => {
-            cursor.move_word_end(buffer, big_word);
-        }
-        Motion::ToLineStart => {
-            println!("Line start");
-        }
-        Motion::_ToLineEnd => {
-            println!("Line end");
-        }
+        Motion::CharLeft => multi_cursor.move_left(buffer),
+        Motion::CharRight => multi_cursor.move_right(buffer, vim_mode),
+        Motion::CharUp => multi_cursor.move_up(buffer, vim_mode),
+        Motion::CharDown => multi_cursor.move_down(buffer, vim_mode),
+        Motion::NextWordStart(big_word) => multi_cursor.move_word_forward(buffer, big_word),
+        Motion::PrevWord(big_word) => multi_cursor.move_word_backward(buffer, big_word),
+        Motion::NextWordEnd(big_word) => multi_cursor.move_word_end(buffer, big_word),
+        Motion::ToLineStart => println!("Line start"),
+        Motion::_ToLineEnd => todo!(),
     }
 }

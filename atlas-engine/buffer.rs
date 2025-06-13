@@ -1,7 +1,7 @@
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::cursor::{Cursor, TextPosition};
+use crate::cursor::TextPosition;
 
 /// Represents a text buffer in the editor.
 /// Handles the actual content storage and text manipulation operations.
@@ -10,6 +10,50 @@ pub struct Buffer {
     pub content: Rope,
     pub name: String,
     // TODO: Add file_path, modified.
+}
+
+/// Macro to handle multi-cursor operations with proper ordering.
+///
+/// It abstracts the common pattern of processing multiple cursors in a specific order to avoid
+/// position invalidation when modifying the buffer.
+///
+/// - "Ascending": Process cursors from left to right (lowest offset to highest), which means
+/// they're used mostly for insertions.
+/// - "Descending": Process cursors from right to left (highest offset to lowest), which means
+/// they're mostly used for deletions.
+///
+/// Usage:
+/// ```
+/// multi_cursor_operation(multi_cursor, ascending, idx => {
+///     // Your operation code here using idx
+/// }};
+/// ```
+macro_rules! multi_cursor_operation {
+    ($multi_cursor:expr, ascending, $idx: ident => $body:block) => {
+        {
+            // Collect indices and sort by offset (ascending).
+            let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
+            cursor_indices.sort_by_key(|&i| $multi_cursor.cursors[i].position().offset);
+
+            // Process each cursor with the body you want.
+            for $idx in cursor_indices {
+                $body
+            }
+        }
+    };
+
+    ($multi_cursor:expr, descending, $idx: ident => $body:block) => {
+        {
+            // Collect indices and sort by offset (descending).
+            let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
+            cursor_indices.sort_by_key(|&i| std::cmp::Reverse($multi_cursor.cursors[i].position().offset));
+
+            // Process each cursor with the body you want.
+            for $idx in cursor_indices {
+                $body
+            }
+        }
+    }
 }
 
 impl Buffer {
@@ -121,89 +165,183 @@ impl Buffer {
             .byte_to_char(start_byte + next_byte_off_in_slice)
     }
 
-    pub fn insert_char(&mut self, cursor: &mut Cursor, c: char) {
-        let pos = cursor.position();
-        self.validate_position(&pos);
+    pub fn insert_char(&mut self, multi_cursor: &mut crate::MultiCursor, c: char) {
+        multi_cursor_operation!(multi_cursor, ascending, idx => {
+            let pos = multi_cursor.cursors[idx].position();
+            self.validate_position(&pos);
 
-        self.content.insert_char(pos.offset, c);
-        cursor.move_to_position(
-            TextPosition::new(pos.line, pos.col + 1, pos.offset + 1),
-            self,
-        );
+            // Insert character at current position.
+            self.content.insert_char(pos.offset, c);
+
+            // Move this cursor to the position after the inserted character.
+            let new_pos = TextPosition::new(pos.line, pos.col + 1, pos.offset + 1);
+            self.validate_position(&new_pos);
+            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+
+            // Update positions of all other cursors affected by this insertion.
+            self.update_cursors_after_modification(multi_cursor, pos.offset, 1, idx);
+        });
     }
 
-    pub fn insert_text(&mut self, cursor: &mut Cursor, s: &str) {
-        let pos = cursor.position();
-        self.validate_position(&pos);
+    pub fn insert_text(&mut self, multi_cursor: &mut crate::MultiCursor, s: &str) {
+        multi_cursor_operation!(multi_cursor, ascending, idx => {
+            let pos = multi_cursor.cursors[idx].position();
+            self.validate_position(&pos);
 
-        self.content.insert(pos.offset, s);
-        let char_count = s.chars().count();
-        let new_pos = if s.contains('\n') {
-            let new_offset = pos.offset + char_count;
-            self.validate_offset(new_offset);
+            // Insert text at current position.
+            self.content.insert(pos.offset, s);
+            let char_count = s.chars().count();
+
+            // Calculate new position for this cursor.
+            let new_pos = if s.contains('\n') {
+                let new_offset = pos.offset + char_count;
+                self.validate_offset(new_offset);
+                let new_line = self.content.char_to_line(new_offset);
+                let line_start = self.content.line_to_char(new_line);
+                TextPosition::new(new_line, new_offset - line_start, new_offset)
+            } else {
+                TextPosition::new(
+                    pos.line,
+                    pos.col + s.graphemes(true).count(),
+                    pos.offset + char_count,
+                )
+            };
+            
+            self.validate_position(&new_pos);
+            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+
+            // Update positions of all other cursors affected by this insertion.
+            self.update_cursors_after_modification(multi_cursor, pos.offset, char_count as isize, idx);
+        });
+    }
+
+    pub fn backspace(&mut self, multi_cursor: &mut crate::MultiCursor) {
+        multi_cursor_operation!(multi_cursor, descending, idx => {
+            let pos = multi_cursor.cursors[idx].position();
+
+            if pos.offset == 0 {
+                continue; // We can't backspace at the beginning of the buffer.
+            }
+
+            let start = self.prev_grapheme_offset(pos.offset);
+            let deleted_len = pos.offset - start;
+
+            // Actually perform the deletion.
+            self.content.remove(start..pos.offset);
+
+            // After deletion, the cursor should be at the start position.
+            let new_offset = start;
             let new_line = self.content.char_to_line(new_offset);
             let line_start = self.content.line_to_char(new_line);
-            TextPosition::new(new_line, new_offset - line_start, new_offset)
-        } else {
-            TextPosition::new(
-                pos.line,
-                pos.col + s.graphemes(true).count(),
-                pos.offset + char_count,
-            )
-        };
-        self.validate_position(&new_pos);
-        cursor.move_to_position(new_pos, self);
+            let new_col = new_offset - line_start;
+            let new_pos = TextPosition::new(new_line, new_col, new_offset);
+
+            self.validate_position(&new_pos);
+            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+
+            // Update positions of all other cursors affected by this deletion.
+            self.update_cursors_after_modification(
+                multi_cursor,
+                start,
+                -(deleted_len as isize),
+                idx,
+            );
+        });
+
+        // Ensure all positions are consistent.
+        multi_cursor.refresh_positions(self);
     }
 
-    pub fn insert_newline(&mut self, cursor: &mut Cursor) {
-        let pos = cursor.position();
-        self.validate_position(&pos);
-        self.content.insert_char(pos.offset, '\n');
-        let new_line = pos.line + 1;
-        let new_offset = self.content.line_to_char(new_line);
-        let new_pos = TextPosition::new(new_line, 0, new_offset);
-        self.validate_position(&new_pos);
-        cursor.move_to_position(new_pos, self);
+    pub fn delete(&mut self, multi_cursor: &mut crate::MultiCursor) {
+        multi_cursor_operation!(multi_cursor, descending, idx => {
+            let pos = multi_cursor.cursors[idx].position();
+            let end = self.next_grapheme_offset(pos.offset);
+            let deleted_len = end - pos.offset; // Length of the deleted grapheme.
+
+            // Perform the deletion.
+            self.content.remove(pos.offset..end);
+
+            // Update positions of all other cursors affected by this deletion.
+            self.update_cursors_after_modification(
+                multi_cursor,
+                pos.offset,
+                -(deleted_len as isize),
+                idx,
+            );
+        });
+
+        // Ensure all positions are consistent.
+        multi_cursor.refresh_positions(self);
     }
 
-    pub fn delete(&mut self, cursor: &mut Cursor) {
-        let pos = cursor.position();
-        self.validate_position(&pos);
-        let end = self.next_grapheme_offset(pos.offset);
-        self.validate_position(&pos);
+    pub fn insert_newline(&mut self, multi_cursor: &mut crate::MultiCursor) {
+        multi_cursor_operation!(multi_cursor, ascending, idx => {
+            let pos = multi_cursor.cursors[idx].position();
 
-        self.content.remove(pos.offset..end);
-    }
+            // Insert newline at current position.
+            self.content.insert_char(pos.offset, '\n');
 
-    pub fn backspace(&mut self, cursor: &mut Cursor) {
-        let pos = cursor.position();
-        self.validate_position(&pos);
+            // Move this cursor to the start of the new line.
+            let new_line = pos.line + 1;
+            let new_offset = self.content.line_to_char(new_line);
+            let new_pos = TextPosition::new(new_line, 0, new_offset);
+            self.validate_position(&new_pos);
 
-        if pos.offset == 0 {
-            return;
-        }
+            multi_cursor.cursors[idx].move_to_position(new_pos, self);
 
-        let start = self.prev_grapheme_offset(pos.offset);
-        self.content.remove(start..pos.offset);
-
-        let new_pos = if pos.col == 0 && pos.line > 0 {
-            let prev_line = pos.line - 1;
-            let prev_line_length = self.visual_line_length(prev_line);
-            let new_offset = self.content.line_to_char(prev_line) + prev_line_length;
-            TextPosition::new(prev_line, prev_line_length, new_offset)
-        } else {
-            let new_col = pos.col - 1;
-            let new_offset = self.grapheme_col_to_offset(pos.line, new_col);
-            TextPosition::new(pos.line, new_col, new_offset)
-        };
-        
-        self.validate_position(&new_pos);
-        cursor.move_to_position(new_pos, self);
+            // Update positions of all other cursors affected by this insertion.
+            self.update_cursors_after_modification(multi_cursor, pos.offset, 1, idx);
+        });
     }
 
     //
     // Correctness.
     //
+
+    /// Helper function to update cursor positions after buffer modifications.
+    /// This handles the common pattern of updating all cursors that come after a modification point.
+    fn update_cursors_after_modification(
+        &self,
+        multi_cursor: &mut crate::MultiCursor,
+        modification_offset: usize,
+        offset_delta: isize, // Positive for insertions, negative for deletions.
+        skip_cursor_idx: usize,
+    ) {
+        for (cursor_idx, cursor) in multi_cursor.cursors.iter_mut().enumerate() {
+            if cursor_idx != skip_cursor_idx {
+                let cursor_pos = cursor.position();
+                let should_update = if offset_delta > 0 {
+                    // For insertions, update cursors at or after the modification point.
+                    cursor_pos.offset >= modification_offset
+                } else {
+                    // For deletions, update cursors after the modification point.
+                    cursor_pos.offset > modification_offset
+                };
+
+                if should_update {
+                    let new_offset = if offset_delta > 0 {
+                        cursor_pos.offset + offset_delta as usize
+                    } else {
+                        cursor_pos.offset - (-offset_delta) as usize
+                    };
+
+                    let mut updated_pos = TextPosition {
+                        offset: new_offset,
+                        line: cursor_pos.line,
+                        col: cursor_pos.col,
+                    };
+
+                    // Recalculate line and column based on new offset.
+                    updated_pos.line = self.content.char_to_line(updated_pos.offset);
+                    let line_start = self.content.line_to_char(updated_pos.line);
+                    updated_pos.col = updated_pos.offset - line_start;
+
+                    self.validate_position(&updated_pos);
+                    cursor.move_to_position(updated_pos, self);
+                }
+            }
+        }
+    }
 
     pub fn validate_position(&self, pos: &TextPosition) {
         assert!(

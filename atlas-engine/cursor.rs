@@ -3,14 +3,14 @@ use iced::Point;
 use crate::VimMode;
 use super::buffer::Buffer;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
     state: CursorState,
     preferred_column: Option<usize>, // Global preferred column for all modes.
 }
 
 /// Represents the cursor state in the editor.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CursorState {
     /// Single cursor position.
     Normal {
@@ -25,7 +25,7 @@ enum CursorState {
 }
 
 /// Represents a position in the text buffer.
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct TextPosition {
     pub line: usize,
     pub col: usize,

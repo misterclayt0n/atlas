@@ -1,4 +1,4 @@
-use atlas_engine::{Buffer, Cursor, Message, VimMode};
+use atlas_engine::{Buffer, MultiCursor, Message, VimMode};
 use atlas_vim::{execute, KeyEvent, VimEngine};
 use iced::{
     advanced::{
@@ -20,7 +20,7 @@ use iced_graphics::{core::SmolStr, text::Paragraph};
 #[derive(Clone)]
 pub struct Editor {
     pub buffer: Buffer,
-    pub cursor: Cursor,
+    pub multi_cursor: MultiCursor,
     scroll_offset: Point,
     vim: VimEngine,
 }
@@ -52,7 +52,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             buffer: Buffer::new("", "Atlas"),
-            cursor: Cursor::new(),
+            multi_cursor: MultiCursor::default(),
             vim: VimEngine::default(),
             scroll_offset: Point::new(0.0, 0.0),
         }
@@ -105,7 +105,7 @@ impl Editor {
     }
 
     fn ensure_cursor_visible(&mut self, bounds: Rectangle, char_width: f32, line_height: f32) {
-        let cursor_pos = self.cursor.position();
+        let cursor_pos = self.multi_cursor.position();
         let cursor_x = cursor_pos.col as f32 * char_width;
         let cursor_y = cursor_pos.line as f32 * line_height;
 
@@ -144,6 +144,7 @@ impl Editor {
     fn draw_cursor(
         &self,
         renderer: &mut impl iced::advanced::text::Renderer,
+        cursor: &atlas_engine::Cursor,
         position: Point,
         char_width: f32,
         line_height: f32,
@@ -166,7 +167,7 @@ impl Editor {
 
         // Get character under the cursor.
         let char_under_cursor =
-            if let Some(character) = self.buffer.content.get_char(self.cursor.position().offset) {
+            if let Some(character) = self.buffer.content.get_char(cursor.position().offset) {
                 character
             } else {
                 ' '
@@ -219,62 +220,25 @@ impl Editor {
         char_width: f32,
         line_height: f32,
     ) {
-        if let Some((start, end)) = self.cursor.get_selection() {
-            // Selection color.
-            let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
+        for cursor in self.multi_cursor.all_cursors() {
+            if let Some((start, end)) = cursor.get_selection() {
+                // Selection color.
+                let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
 
-            if start.line == end.line {
-                // Single line selection
-                let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
-                let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
-                let mut width = (end.col - start.col) as f32 * char_width;
-                
-                // Ensure minimum width for empty selections (like newlines)
-                if width < char_width * 0.5 {
-                    width = char_width * 0.5;
-                }
-
-                let selection_bounds = Rectangle {
-                    x: start_x,
-                    y: start_y,
-                    width,
-                    height: line_height,
-                };
-
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: selection_bounds,
-                        ..Default::default()
-                    },
-                    selection_color,
-                );
-            } else {
-                // Multi-line selection
-                for line in start.line..=end.line {
-                    let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
-
-                    let (start_col, end_col) = if line == start.line {
-                        // First line: from start position to end of line
-                        (start.col, self.buffer.grapheme_len(line))
-                    } else if line == end.line {
-                        // Last line: from beginning to end position
-                        (0, end.col)
-                    } else {
-                        // Middle lines: entire line
-                        (0, self.buffer.grapheme_len(line))
-                    };
-
-                    let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
-                    let mut width = (end_col - start_col) as f32 * char_width;
+                if start.line == end.line {
+                    // Single line selection
+                    let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
+                    let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
+                    let mut width = (end.col - start.col) as f32 * char_width;
                     
-                    // For empty lines or zero-width selections, show at least a small highlight
+                    // Ensure minimum width for empty selections (like newlines)
                     if width < char_width * 0.5 {
                         width = char_width * 0.5;
                     }
 
                     let selection_bounds = Rectangle {
                         x: start_x,
-                        y: line_y,
+                        y: start_y,
                         width,
                         height: line_height,
                     };
@@ -286,6 +250,45 @@ impl Editor {
                         },
                         selection_color,
                     );
+                } else {
+                    // Multi-line selection
+                    for line in start.line..=end.line {
+                        let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
+
+                        let (start_col, end_col) = if line == start.line {
+                            // First line: from start position to end of line
+                            (start.col, self.buffer.grapheme_len(line))
+                        } else if line == end.line {
+                            // Last line: from beginning to end position
+                            (0, end.col)
+                        } else {
+                            // Middle lines: entire line
+                            (0, self.buffer.grapheme_len(line))
+                        };
+
+                        let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
+                        let mut width = (end_col - start_col) as f32 * char_width;
+                        
+                        // For empty lines or zero-width selections, show at least a small highlight
+                        if width < char_width * 0.5 {
+                            width = char_width * 0.5;
+                        }
+
+                        let selection_bounds = Rectangle {
+                            x: start_x,
+                            y: line_y,
+                            width,
+                            height: line_height,
+                        };
+
+                        renderer.fill_quad(
+                            renderer::Quad {
+                                bounds: selection_bounds,
+                                ..Default::default()
+                            },
+                            selection_color,
+                        );
+                    }
                 }
             }
         }
@@ -405,17 +408,20 @@ where
             );
         }
 
-        // Draw cursor.
-        let cursor_pos = self.cursor.position();
-        let cursor_x = bounds.x + (cursor_pos.col as f32 * char_w - self.scroll_offset.x);
-        let cursor_y = bounds.y + (cursor_pos.line as f32 * line_height - self.scroll_offset.y);
-        self.draw_cursor(
-            renderer,
-            Point::new(cursor_x, cursor_y),
-            char_w,
-            line_height,
-            layout,
-        );
+        // Draw all cursors.
+        for cursor in self.multi_cursor.all_cursors() {
+            let pos = cursor.position();
+            let cursor_x = bounds.x + (pos.col as f32 * char_w - self.scroll_offset.x);
+            let cursor_y = bounds.y + (pos.line as f32 * line_height - self.scroll_offset.y);
+            self.draw_cursor(
+                renderer,
+                cursor,
+                Point::new(cursor_x, cursor_y),
+                char_w,
+                line_height,
+                layout,
+            );
+        }
     }
 
     fn on_event(
@@ -476,7 +482,7 @@ where
                     translate_to_keyevent(&key, &text).and_then(|ke| self.vim.handle_key(ke));
 
                 if let Some(action) = maybe_action {
-                    execute(action, &mut self.buffer, &mut self.cursor, &self.vim.mode);
+                    execute(action, &mut self.buffer, &mut self.multi_cursor, &self.vim.mode);
                     self.ensure_cursor_visible(editor_state.bounds, char_width, line_height);
                     return event::Status::Captured;
                 }
