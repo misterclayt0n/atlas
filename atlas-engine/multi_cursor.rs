@@ -107,7 +107,8 @@ impl MultiCursor {
     // Movement helpers.
     // Broadcast to all cursors.
     //
-    // NOTE: This truly is a lot of boilerplate code. I have to evaluate this in the future.
+    // NOTE: This truly is a lot of shitty, stupid, moronic, boilerplate code. 
+    // I have to abstract this in the future.
     //
 
     pub fn move_left(&mut self, buffer: &Buffer) {

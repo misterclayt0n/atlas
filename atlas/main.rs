@@ -2,6 +2,7 @@
 // TODO: File loading/saving.
 // TODO: Command mode.
 // TODO: Multiple buffer support - Buffer management.
+// TODO: Multiple windows - Split view (horizontal/vertical), should be infinite splits btw.
 // TODO: Status line.
 // TODO: Line number.
 // TODO: Syntax Highlighting.
