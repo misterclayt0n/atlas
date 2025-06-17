@@ -222,23 +222,61 @@ impl Editor {
     ) {
         for cursor in self.multi_cursor.all_cursors() {
             if let Some((start, end)) = cursor.get_selection() {
-                // Selection color.
-                let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
+            // Selection color.
+            let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
 
-                if start.line == end.line {
-                    // Single line selection
-                    let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
-                    let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
-                    let mut width = (end.col - start.col) as f32 * char_width;
+            if start.line == end.line {
+                // Single line selection
+                let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
+                let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
+                let mut width = (end.col - start.col) as f32 * char_width;
+                
+                // Ensure minimum width for empty selections (like newlines)
+                if width < char_width * 0.5 {
+                    width = char_width * 0.5;
+                }
+
+                let selection_bounds = Rectangle {
+                    x: start_x,
+                    y: start_y,
+                    width,
+                    height: line_height,
+                };
+
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: selection_bounds,
+                        ..Default::default()
+                    },
+                    selection_color,
+                );
+            } else {
+                // Multi-line selection
+                for line in start.line..=end.line {
+                    let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
+
+                    let (start_col, end_col) = if line == start.line {
+                        // First line: from start position to end of line
+                        (start.col, self.buffer.grapheme_len(line))
+                    } else if line == end.line {
+                        // Last line: from beginning to end position
+                        (0, end.col)
+                    } else {
+                        // Middle lines: entire line
+                        (0, self.buffer.grapheme_len(line))
+                    };
+
+                    let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
+                    let mut width = (end_col - start_col) as f32 * char_width;
                     
-                    // Ensure minimum width for empty selections (like newlines)
+                    // For empty lines or zero-width selections, show at least a small highlight
                     if width < char_width * 0.5 {
                         width = char_width * 0.5;
                     }
 
                     let selection_bounds = Rectangle {
                         x: start_x,
-                        y: start_y,
+                        y: line_y,
                         width,
                         height: line_height,
                     };
@@ -250,44 +288,6 @@ impl Editor {
                         },
                         selection_color,
                     );
-                } else {
-                    // Multi-line selection
-                    for line in start.line..=end.line {
-                        let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
-
-                        let (start_col, end_col) = if line == start.line {
-                            // First line: from start position to end of line
-                            (start.col, self.buffer.grapheme_len(line))
-                        } else if line == end.line {
-                            // Last line: from beginning to end position
-                            (0, end.col)
-                        } else {
-                            // Middle lines: entire line
-                            (0, self.buffer.grapheme_len(line))
-                        };
-
-                        let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
-                        let mut width = (end_col - start_col) as f32 * char_width;
-                        
-                        // For empty lines or zero-width selections, show at least a small highlight
-                        if width < char_width * 0.5 {
-                            width = char_width * 0.5;
-                        }
-
-                        let selection_bounds = Rectangle {
-                            x: start_x,
-                            y: line_y,
-                            width,
-                            height: line_height,
-                        };
-
-                        renderer.fill_quad(
-                            renderer::Quad {
-                                bounds: selection_bounds,
-                                ..Default::default()
-                            },
-                            selection_color,
-                        );
                     }
                 }
             }
@@ -413,14 +413,14 @@ where
             let pos = cursor.position();
             let cursor_x = bounds.x + (pos.col as f32 * char_w - self.scroll_offset.x);
             let cursor_y = bounds.y + (pos.line as f32 * line_height - self.scroll_offset.y);
-            self.draw_cursor(
-                renderer,
+        self.draw_cursor(
+            renderer,
                 cursor,
-                Point::new(cursor_x, cursor_y),
-                char_w,
-                line_height,
-                layout,
-            );
+            Point::new(cursor_x, cursor_y),
+            char_w,
+            line_height,
+            layout,
+        );
         }
     }
 

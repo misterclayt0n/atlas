@@ -17,6 +17,37 @@ impl Default for MultiCursor {
     }
 }
 
+macro_rules! generate_cursor_methods {
+    // With buffer params.
+    ($method_name:ident($buffer_param:ident: &Buffer)) => {
+        pub fn $method_name(&mut self, $buffer_param: &Buffer) {
+            for cursor in &mut self.cursors {
+                cursor.$method_name($buffer_param);
+            }
+            self.merge_overlapping();
+        }
+    };
+
+    // Buffer + additional params.
+    ($method_name:ident($buffer_param:ident: &Buffer, $($param:ident: $param_type:ty),+)) => {
+        pub fn $method_name(&mut self, $buffer_param: &Buffer, $($param: $param_type),+) {
+            for cursor in &mut self.cursors {
+                cursor.$method_name($buffer_param, $($param),+);
+            }
+            self.merge_overlapping();
+        }
+    };
+
+    // Method that doesn't need merge_overlapping (like adjust_for_mode).
+    (no_merge $method_name:ident($buffer_param:ident: &Buffer, $($param:ident: $param_type:ty),+)) => {
+        pub fn $method_name(&mut self, $buffer_param: &Buffer, $($param: $param_type),+) {
+            for cursor in &mut self.cursors {
+                cursor.$method_name($buffer_param, $($param),+);
+            }
+        }
+    };
+}
+
 impl MultiCursor {
     /// Create a new `MultiCursor` with a single cursor at position (0,0).
     pub fn new() -> Self {
@@ -107,64 +138,16 @@ impl MultiCursor {
     // Movement helpers.
     // Broadcast to all cursors.
     //
-    // NOTE: This truly is a lot of shitty, stupid, moronic, boilerplate code. 
-    // I have to abstract this in the future.
-    //
 
-    pub fn move_left(&mut self, buffer: &Buffer) {
-        for cursor in &mut self.cursors {
-            cursor.move_left(buffer);
-        }
-        self.merge_overlapping();
-    }
+    generate_cursor_methods!(move_left(buffer: &Buffer));
+    generate_cursor_methods!(move_right(buffer: &Buffer, mode: &VimMode));
+    generate_cursor_methods!(move_up(buffer: &Buffer, mode: &VimMode));
+    generate_cursor_methods!(move_down(buffer: &Buffer, mode: &VimMode));
+    generate_cursor_methods!(move_word_forward(buffer: &Buffer, big_word: bool));
+    generate_cursor_methods!(move_word_backward(buffer: &Buffer, big_word: bool));
+    generate_cursor_methods!(move_word_end(buffer: &Buffer, big_word: bool));
 
-    pub fn move_right(&mut self, buffer: &Buffer, mode: &VimMode) {
-        for cursor in &mut self.cursors {
-            cursor.move_right(buffer, mode);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn move_up(&mut self, buffer: &Buffer, mode: &VimMode) {
-        for cursor in &mut self.cursors {
-            cursor.move_up(buffer, mode);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn move_down(&mut self, buffer: &Buffer, mode: &VimMode) {
-        for cursor in &mut self.cursors {
-            cursor.move_down(buffer, mode);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool) {
-        for cursor in &mut self.cursors {
-            cursor.move_word_forward(buffer, big_word);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool) {
-        for cursor in &mut self.cursors {
-            cursor.move_word_backward(buffer, big_word);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool) {
-        for cursor in &mut self.cursors {
-            cursor.move_word_end(buffer, big_word);
-        }
-        self.merge_overlapping();
-    }
-
-    pub fn adjust_for_mode(&mut self, buffer: &Buffer, mode: &VimMode) {
-        for cursor in &mut self.cursors {
-            cursor.adjust_for_mode(buffer, mode);
-        }
-    }
+    generate_cursor_methods!(no_merge adjust_for_mode(buffer: &Buffer, mode: &VimMode));
 
     /// After any mutation we call this function to ensure we do not have two
     /// cursors in exactly the same location. If that happens we keep the
