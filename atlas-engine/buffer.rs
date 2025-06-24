@@ -17,10 +17,8 @@ pub struct Buffer {
 /// It abstracts the common pattern of processing multiple cursors in a specific order to avoid
 /// position invalidation when modifying the buffer.
 ///
-/// - "Ascending": Process cursors from left to right (lowest offset to highest), which means
-/// they're used mostly for insertions.
-/// - "Descending": Process cursors from right to left (highest offset to lowest), which means
-/// they're mostly used for deletions.
+/// - "Ascending": Process cursors from left to right (lowest offset to highest), which means they're used mostly for insertions.
+/// - "Descending": Process cursors from right to left (highest offset to lowest), which means they're mostly used for deletions.
 ///
 /// Usage:
 /// ```
@@ -29,31 +27,28 @@ pub struct Buffer {
 /// }};
 /// ```
 macro_rules! multi_cursor_operation {
-    ($multi_cursor:expr, ascending, $idx: ident => $body:block) => {
-        {
-            // Collect indices and sort by offset (ascending).
-            let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
-            cursor_indices.sort_by_key(|&i| $multi_cursor.cursors[i].position().offset);
+    ($multi_cursor:expr, ascending, $idx: ident => $body:block) => {{
+        // Collect indices and sort by offset (ascending).
+        let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
+        cursor_indices.sort_by_key(|&i| $multi_cursor.cursors[i].position().offset);
 
-            // Process each cursor with the body you want.
-            for $idx in cursor_indices {
-                $body
-            }
+        // Process each cursor with the body you want.
+        for $idx in cursor_indices {
+            $body
         }
-    };
+    }};
 
-    ($multi_cursor:expr, descending, $idx: ident => $body:block) => {
-        {
-            // Collect indices and sort by offset (descending).
-            let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
-            cursor_indices.sort_by_key(|&i| std::cmp::Reverse($multi_cursor.cursors[i].position().offset));
+    ($multi_cursor:expr, descending, $idx: ident => $body:block) => {{
+        // Collect indices and sort by offset (descending).
+        let mut cursor_indices: Vec<usize> = (0..$multi_cursor.cursors.len()).collect();
+        cursor_indices
+            .sort_by_key(|&i| std::cmp::Reverse($multi_cursor.cursors[i].position().offset));
 
-            // Process each cursor with the body you want.
-            for $idx in cursor_indices {
-                $body
-            }
+        // Process each cursor with the body you want.
+        for $idx in cursor_indices {
+            $body
         }
-    }
+    }};
 }
 
 impl Buffer {
@@ -206,7 +201,6 @@ impl Buffer {
                     pos.offset + char_count,
                 )
             };
-            
             self.validate_position(&new_pos);
             multi_cursor.cursors[idx].move_to_position(new_pos, self);
 

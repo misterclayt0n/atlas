@@ -14,7 +14,7 @@
 
 use atlas_engine::Message;
 use atlas_widgets::editor::Editor;
-use iced::Element;
+use iced::{Element, widget::Row};
 
 /// Main application structure.
 /// Manages the overall editor state and handles high-level operations.
@@ -35,22 +35,45 @@ impl Default for Atlas {
 impl Atlas {
     /// Generates the window title based on the active buffer
     fn title(&self) -> String {
-        format!("Atlas - {}", self.editors[self.active_editor].buffer.name)
+        format!(
+            "Atlas - {}",
+            self.editors[self.active_editor].buffer.borrow().name
+        )
     }
 
     /// Handles all editor actions and updates state accordingly
     fn update(&mut self, message: Message) {
         match message {
+            Message::SplitHorizontal => {
+                let new_editor = self.editors[self.active_editor].clone();
+                self.editors.push(new_editor);
+                self.active_editor = self.editors.len() - 1;
+                self.editors[self.active_editor].is_focused = true;
+            }
             Message::Quit => {
                 std::process::exit(0);
+            }
+            Message::FocusEditor(editor_id) => {
+                if editor_id < self.editors.len() {
+                    self.active_editor = editor_id;
+                }
             }
         }
     }
 
     /// Renders the entire editor interface
     fn view(&self) -> Element<Message> {
-        // Render
-        self.editors[self.active_editor].clone().into()
+        let mut row = Row::new();
+
+        for (index, editor) in self.editors.iter().enumerate() {
+            let is_focused = index == self.active_editor;
+
+            // NOTE: Is cloning the editor like this really a good idea?
+            let configured_editor = editor.clone().focused(is_focused);
+            row = row.push(configured_editor);
+        }
+
+        row.into()
     }
 }
 

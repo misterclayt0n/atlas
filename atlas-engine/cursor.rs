@@ -1,9 +1,9 @@
 use iced::Point;
 
-use crate::VimMode;
 use super::buffer::Buffer;
+use crate::VimMode;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
     state: CursorState,
     preferred_column: Option<usize>, // Global preferred column for all modes.
@@ -13,15 +13,21 @@ pub struct Cursor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CursorState {
     /// Single cursor position.
-    Normal {
-        position: TextPosition,
-    },
+    Normal { position: TextPosition },
 
     /// Text selection with start and end positions.
     Selection {
         anchor: TextPosition, // Where it starts.
         active: TextPosition, // Where it is currently.
     },
+}
+
+impl Default for CursorState {
+    fn default() -> Self {
+        Self::Normal {
+            position: TextPosition::default(),
+        }
+    }
 }
 
 /// Represents a position in the text buffer.
@@ -42,9 +48,7 @@ enum CharClass {
 fn get_char_class(c: char, big_word: bool) -> CharClass {
     if c.is_whitespace() {
         CharClass::Whitespace
-    } else if big_word {
-        CharClass::Word // All non-whitespace is a WORD.
-    } else if c.is_alphanumeric() || c == '_' {
+    } else if big_word || c.is_alphanumeric() || c == '_' {
         CharClass::Word
     } else {
         CharClass::Punctuation
@@ -55,7 +59,9 @@ impl Cursor {
     pub fn new() -> Self {
         // This never starts with selection.
         Self {
-            state: CursorState::Normal { position: TextPosition::default() },
+            state: CursorState::Normal {
+                position: TextPosition::default(),
+            },
             preferred_column: None,
         }
     }
@@ -93,7 +99,7 @@ impl Cursor {
                 active: position,
             };
         } else {
-            assert!(false, "start_selection called on non normal cursor");
+            unreachable!("start_selection called on non normal cursor");
         }
     }
 
@@ -102,7 +108,7 @@ impl Cursor {
         if let CursorState::Selection { active, .. } = self.state {
             self.state = CursorState::Normal { position: active };
         } else {
-            assert!(false, "clear_selection called on non normal cursor");
+            unreachable!("clear_selection called on non normal cursor");
         }
     }
 
@@ -500,11 +506,7 @@ impl Cursor {
         match vim_mode {
             VimMode::Normal | VimMode::Visual => {
                 let line_len = buffer.grapheme_len(target);
-                if line_len == 0 {
-                    0
-                } else {
-                    line_len - 1
-                }
+                if line_len == 0 { 0 } else { line_len - 1 }
             }
             VimMode::Insert => buffer.grapheme_len(target),
         }

@@ -1,46 +1,52 @@
-use atlas_engine::{Buffer, MultiCursor, Message, VimMode};
-use atlas_vim::{execute, KeyEvent, VimEngine};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use atlas_engine::{Buffer, Message, MultiCursor, VimMode};
+use atlas_vim::{KeyEvent, VimEngine, execute};
 use iced::{
+    Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
     advanced::{
+        Clipboard, Layout, Shell, Text, Widget,
         graphics::core::{event, widget},
         layout, mouse, renderer,
         text::Paragraph as _,
         widget::Tree,
-        Clipboard, Layout, Shell, Text, Widget,
     },
     alignment,
     keyboard::{self, Key},
     widget::span,
-    Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
 };
 use iced_graphics::{core::SmolStr, text::Paragraph};
+
+pub type SharedBuffer = Rc<RefCell<Buffer>>;
 
 /// Custom widget that handles the visual representation of text content.
 /// Responsible for rendering text, cursor, and handling visual aspects.
 #[derive(Clone)]
 pub struct Editor {
-    pub buffer: Buffer,
+    pub buffer: SharedBuffer,
     pub multi_cursor: MultiCursor,
-    scroll_offset: Point,
-    vim: VimEngine,
+    pub scroll_offset: Point,
+    pub vim: VimEngine,
+    pub is_focused: bool,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct EditorState {
-    is_focused: bool,
     // Cached values
     char_width: Option<f32>,
     line_height: Option<f32>,
     bounds: Rectangle,
 }
 
-impl Default for EditorState {
+impl Default for Editor {
     fn default() -> Self {
         Self {
-            is_focused: true, // This is for coding experience.
-            char_width: None,
-            line_height: None,
-            bounds: Rectangle::default(),
+            buffer: Rc::new(RefCell::new(Buffer::new("", "Atlas"))),
+            multi_cursor: MultiCursor::default(),
+            vim: VimEngine::default(),
+            scroll_offset: Point::new(0.0, 0.0),
+            is_focused: false,
         }
     }
 }
@@ -50,12 +56,12 @@ impl Editor {
     const MARGIN_COL: usize = 8;
 
     pub fn new() -> Self {
-        Self {
-            buffer: Buffer::new("", "Atlas"),
-            multi_cursor: MultiCursor::default(),
-            vim: VimEngine::default(),
-            scroll_offset: Point::new(0.0, 0.0),
-        }
+        Self::default()
+    }
+
+    pub fn focused(mut self, is_focused: bool) -> Self {
+        self.is_focused = is_focused;
+        self
     }
 
     fn char_width(&self, renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>) -> f32 {
@@ -101,7 +107,7 @@ impl Editor {
 
     fn line_height(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
         let size: f32 = renderer.default_size().into();
-        return size * 1.2;
+        size * 1.2
     }
 
     fn ensure_cursor_visible(&mut self, bounds: Rectangle, char_width: f32, line_height: f32) {
@@ -150,6 +156,11 @@ impl Editor {
         line_height: f32,
         layout: iced::advanced::Layout<'_>,
     ) {
+        // Do not render the cursor unless we're focusing on it.
+        if !self.is_focused {
+            return;
+        }
+
         let cursor_bounds = match self.vim.mode {
             VimMode::Normal | VimMode::Visual => Rectangle {
                 x: position.x,
@@ -166,12 +177,12 @@ impl Editor {
         };
 
         // Get character under the cursor.
-        let char_under_cursor =
-            if let Some(character) = self.buffer.content.get_char(cursor.position().offset) {
-                character
-            } else {
-                ' '
-            };
+        let char_under_cursor = self
+            .buffer
+            .borrow()
+            .content
+            .get_char(cursor.position().offset)
+            .unwrap_or(' ');
 
         let cursor_background = match self.vim.mode {
             VimMode::Normal | VimMode::Visual => Color::WHITE,
@@ -222,61 +233,24 @@ impl Editor {
     ) {
         for cursor in self.multi_cursor.all_cursors() {
             if let Some((start, end)) = cursor.get_selection() {
-            // Selection color.
-            let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
+                // Selection color.
+                let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
 
-            if start.line == end.line {
-                // Single line selection
-                let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
-                let start_y = bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
-                let mut width = (end.col - start.col) as f32 * char_width;
-                
-                // Ensure minimum width for empty selections (like newlines)
-                if width < char_width * 0.5 {
-                    width = char_width * 0.5;
-                }
+                if start.line == end.line {
+                    // Single line selection
+                    let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
+                    let start_y =
+                        bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
+                    let mut width = (end.col - start.col) as f32 * char_width;
 
-                let selection_bounds = Rectangle {
-                    x: start_x,
-                    y: start_y,
-                    width,
-                    height: line_height,
-                };
-
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds: selection_bounds,
-                        ..Default::default()
-                    },
-                    selection_color,
-                );
-            } else {
-                // Multi-line selection
-                for line in start.line..=end.line {
-                    let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
-
-                    let (start_col, end_col) = if line == start.line {
-                        // First line: from start position to end of line
-                        (start.col, self.buffer.grapheme_len(line))
-                    } else if line == end.line {
-                        // Last line: from beginning to end position
-                        (0, end.col)
-                    } else {
-                        // Middle lines: entire line
-                        (0, self.buffer.grapheme_len(line))
-                    };
-
-                    let start_x = bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
-                    let mut width = (end_col - start_col) as f32 * char_width;
-                    
-                    // For empty lines or zero-width selections, show at least a small highlight
+                    // Ensure minimum width for empty selections (like newlines)
                     if width < char_width * 0.5 {
                         width = char_width * 0.5;
                     }
 
                     let selection_bounds = Rectangle {
                         x: start_x,
-                        y: line_y,
+                        y: start_y,
                         width,
                         height: line_height,
                     };
@@ -288,6 +262,45 @@ impl Editor {
                         },
                         selection_color,
                     );
+                } else {
+                    // Multi-line selection
+                    for line in start.line..=end.line {
+                        let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
+
+                        let (start_col, end_col) = if line == start.line {
+                            // First line: from start position to end of line
+                            (start.col, self.buffer.borrow().grapheme_len(line))
+                        } else if line == end.line {
+                            // Last line: from beginning to end position
+                            (0, end.col)
+                        } else {
+                            // Middle lines: entire line
+                            (0, self.buffer.borrow().grapheme_len(line))
+                        };
+
+                        let start_x =
+                            bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
+                        let mut width = (end_col - start_col) as f32 * char_width;
+
+                        // For empty lines or zero-width selections, show at least a small highlight
+                        if width < char_width * 0.5 {
+                            width = char_width * 0.5;
+                        }
+
+                        let selection_bounds = Rectangle {
+                            x: start_x,
+                            y: line_y,
+                            width,
+                            height: line_height,
+                        };
+
+                        renderer.fill_quad(
+                            renderer::Quad {
+                                bounds: selection_bounds,
+                                ..Default::default()
+                            },
+                            selection_color,
+                        );
                     }
                 }
             }
@@ -372,7 +385,7 @@ where
         // Calculate visible line range.
         let first_line = (self.scroll_offset.y / line_height).floor() as usize;
         let visible_lines = (bounds.height / line_height).ceil() as usize;
-        let total_lines = self.buffer.content.len_lines();
+        let total_lines = self.buffer.borrow().content.len_lines();
         let end_line = (first_line + visible_lines).min(total_lines);
 
         // Calculate visible column range.
@@ -384,9 +397,10 @@ where
 
         // Render each visible line.
         for line_idx in first_line..end_line {
-            let visible_content = self
-                .buffer
-                .grapheme_substring(line_idx, first_col, visible_cols);
+            let visible_content =
+                self.buffer
+                    .borrow()
+                    .grapheme_substring(line_idx, first_col, visible_cols);
             let y = bounds.y + (line_idx as f32 * line_height - self.scroll_offset.y);
             let position = Point::new(bounds.x, y);
 
@@ -413,14 +427,14 @@ where
             let pos = cursor.position();
             let cursor_x = bounds.x + (pos.col as f32 * char_w - self.scroll_offset.x);
             let cursor_y = bounds.y + (pos.line as f32 * line_height - self.scroll_offset.y);
-        self.draw_cursor(
-            renderer,
+            self.draw_cursor(
+                renderer,
                 cursor,
-            Point::new(cursor_x, cursor_y),
-            char_w,
-            line_height,
-            layout,
-        );
+                Point::new(cursor_x, cursor_y),
+                char_w,
+                line_height,
+                layout,
+            );
         }
     }
 
@@ -432,7 +446,7 @@ where
         cursor: mouse::Cursor,
         renderer: &Renderer,
         _clipboard: &mut dyn Clipboard,
-        _shell: &mut Shell<'_, Message>,
+        shell: &mut Shell<'_, Message>,
         _viewport: &Rectangle,
     ) -> event::Status {
         // Access our custom state.
@@ -448,10 +462,10 @@ where
                 mouse::Event::ButtonPressed(mouse::Button::Left) => {
                     // If clicked inside our widget, focus. Otherwise, unfocus.
                     if cursor.is_over(layout.bounds()) {
-                        editor_state.is_focused = true;
+                        self.is_focused = true;
                         return event::Status::Captured;
                     } else {
-                        editor_state.is_focused = false;
+                        self.is_focused = false;
                     }
                 }
                 mouse::Event::WheelScrolled { delta } => {
@@ -472,19 +486,41 @@ where
                 _ => {}
             },
 
-            Event::Keyboard(keyboard::Event::KeyPressed { key, text, .. }) => {
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key,
+                text,
+                modifiers,
+                ..
+            }) => {
                 // Only capture if we are focused.
-                if !editor_state.is_focused {
+                if !self.is_focused {
                     return event::Status::Ignored;
                 }
 
-                let maybe_action =
-                    translate_to_keyevent(&key, &text).and_then(|ke| self.vim.handle_key(ke));
+                let maybe_action = translate_to_keyevent(&key, &text, modifiers)
+                    .and_then(|ke| self.vim.handle_key(ke));
 
                 if let Some(action) = maybe_action {
-                    execute(action, &mut self.buffer, &mut self.multi_cursor, &self.vim.mode);
-                    self.ensure_cursor_visible(editor_state.bounds, char_width, line_height);
-                    return event::Status::Captured;
+                    match action {
+                        atlas_vim::EngineAction::Vim(vim_action) => {
+                            execute(
+                                vim_action,
+                                &mut self.buffer.borrow_mut(),
+                                &mut self.multi_cursor,
+                                &self.vim.mode,
+                            );
+                            self.ensure_cursor_visible(
+                                editor_state.bounds,
+                                char_width,
+                                line_height,
+                            );
+                            return event::Status::Captured;
+                        }
+                        atlas_vim::EngineAction::App(app_action) => {
+                            shell.publish(app_action);
+                            return event::Status::Captured;
+                        }
+                    }
                 }
             }
             _ => {}
@@ -496,42 +532,32 @@ where
 }
 
 // Helper function to create the widget.
-impl<'a> Into<Element<'a, Message, Theme, Renderer>> for Editor
+impl<'a> From<Editor> for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a,
     Theme: 'a + Default,
     Renderer: 'a + renderer::Renderer,
 {
-    fn into(self) -> Element<'a, Message, Theme, Renderer> {
-        Element::new(self)
+    fn from(editor: Editor) -> Self {
+        Element::new(editor)
     }
 }
 
-fn translate_to_keyevent(key: &Key, text: &Option<SmolStr>) -> Option<KeyEvent> {
+fn translate_to_keyevent(
+    key: &Key,
+    text: &Option<SmolStr>,
+    modifiers: keyboard::Modifiers,
+) -> Option<KeyEvent> {
     let text_str = text.as_ref().map(|t| t.to_string());
 
     match key.as_ref() {
         Key::Named(keyboard::key::Named::Escape) => Some(KeyEvent::Esc),
         Key::Named(keyboard::key::Named::Backspace) => Some(KeyEvent::Backspace),
         Key::Named(keyboard::key::Named::Enter) => Some(KeyEvent::Enter),
-        Key::Character(s) => {
-            if s.len() == 1 {
-                // Use text if available, fallback to key.
-                let c = text_str.unwrap_or(s.to_string());
-                Some(KeyEvent::Key {
-                    key: Key::Character(SmolStr::new(&c)),
-                    text: Some(c),
-                })
-            } else {
-                Some(KeyEvent::Key {
-                    key: key.clone(),
-                    text: text_str,
-                })
-            }
-        }
         _ => Some(KeyEvent::Key {
             key: key.clone(),
             text: text_str,
+            modifiers,
         }),
     }
 }

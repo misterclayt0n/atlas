@@ -13,8 +13,10 @@ pub enum VimMode {
     Visual
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Represents possible actions that can be performed in the editor.
 pub enum Message {
+    FocusEditor(usize),
+    SplitHorizontal,
     Quit,
 }

@@ -1,5 +1,5 @@
-use atlas_engine::{Buffer, VimMode, MultiCursor};
-use iced::keyboard::{self, Key};
+use atlas_engine::{Buffer, VimMode, MultiCursor, Message};
+use iced::keyboard::{self, Key, Modifiers};
 
 use crate::keymap::Keymap;
 
@@ -75,6 +75,12 @@ pub enum VimAction {
     RemoveSecondaryCursors,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum EngineAction {
+    Vim(VimAction),
+    App(Message),
+}
+
 #[derive(Clone)]
 pub struct VimEngine {
     pub mode: VimMode,
@@ -94,18 +100,18 @@ impl Default for VimEngine {
 
 impl VimEngine {
     /// Returns at most **one** high-level action for the editor to execute.
-    pub fn handle_key(&mut self, key: KeyEvent) -> Option<VimAction> {
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<EngineAction> {
         use VimMode::*;
         match self.mode {
             Insert => match key {
-                KeyEvent::Key { key, text } => {
+                KeyEvent::Key { key, text, .. } => {
                     // Prioritize text if available.
                     if let Some(s) = text {
                         if !s.is_empty() {
                             for ch in s.chars() {
                                 self.last_edit = Some(VimAction::InsertChar(ch));
                             }
-                            return Some(VimAction::InsertText(s));
+                            return Some(EngineAction::Vim(VimAction::InsertText(s)));
                         }
                     }
 
@@ -115,7 +121,7 @@ impl VimEngine {
                             let c = s.chars().next().unwrap();
                             if !c.is_control() {
                                 self.last_edit = Some(VimAction::InsertChar(c));
-                                return Some(VimAction::InsertChar(c));
+                                return Some(EngineAction::Vim(VimAction::InsertChar(c)));
                             }
                         }
                     }
@@ -124,64 +130,61 @@ impl VimEngine {
 
                 KeyEvent::Esc => {
                     self.mode = Normal;
-                    Some(VimAction::ChangeMode(Normal))
+                    Some(EngineAction::Vim(VimAction::ChangeMode(Normal)))
                 }
-                KeyEvent::Backspace => Some(VimAction::Backspace),
-                KeyEvent::Enter => Some(VimAction::InsertNewline), // NOTE: Enter should likely be an action
+                KeyEvent::Backspace => Some(EngineAction::Vim(VimAction::Backspace)),
+                KeyEvent::Enter => Some(EngineAction::Vim(VimAction::InsertNewline)), // NOTE: Enter should likely be an action
             },
 
             Normal => {
-                if let KeyEvent::Key { key, .. } = key {
-                    if let Key::Character(s) = key {
-                        if s.len() == 1 {
-                            let c = s.chars().next().unwrap();
-                            if let Some(action) = self.keymap.handle_key(&self.mode, c, None) {
-                                if matches!(
-                                    action,
-                                    VimAction::InsertChar(_) | VimAction::Operate { .. }
-                                ) {
-                                    self.last_edit = Some(action.clone());
-                                }
-                                if let VimAction::ChangeMode(m) = &action {
-                                    self.mode = m.clone();
-                                }
-                                return Some(action);
-                            }
+                if let Some(action) = self.keymap.handle_key(&self.mode, &key, None) {
+                    if let EngineAction::Vim(v_action) = &action {
+                        if matches!(
+                            v_action,
+                            VimAction::InsertChar(_) | VimAction::Operate { .. }
+                        ) {
+                            self.last_edit = Some(v_action.clone());
+                        }
+                        if let VimAction::ChangeMode(m) = &v_action {
+                            self.mode = m.clone();
                         }
                     }
+                    return Some(action);
                 }
 
                 None
             }
 
             Visual => {
-                if let KeyEvent::Key { ref key, .. } = key {
-                    if let Key::Character(s) = key {
-                        if s.len() == 1 {
-                            let c = s.chars().next().unwrap();
+                if let KeyEvent::Key {
+                    key: Key::Character(ref s),
+                    ..
+                } = key
+                {
+                    if s.len() == 1 {
+                        let c = s.chars().next().unwrap();
 
-                            // Handle movement in visual mode just like we do in normal mode.
-                            if let Some(motion) = Motion::from_hjkl(c) {
-                                return Some(VimAction::Move { motion, count: 1 });
-                            }
+                        // Handle movement in visual mode just like we do in normal mode.
+                        if let Some(motion) = Motion::from_hjkl(c) {
+                            return Some(EngineAction::Vim(VimAction::Move { motion, count: 1 }));
+                        }
 
-                            // Handle operators in visual mode, also just like we do it in normal mode.
-                            if let Some(op) = Operator::from_char(c) {
-                                // In visual mode, operators work on the selection.
-                                self.mode = Normal;
-                                return Some(VimAction::Operate {
-                                    _op: op,
-                                    _motion: Motion::CharRight, // Placeholder - will use selection.
-                                    _count: 1,
-                                });
-                            }
+                        // Handle operators in visual mode, also just like we do it in normal mode.
+                        if let Some(op) = Operator::from_char(c) {
+                            // In visual mode, operators work on the selection.
+                            self.mode = Normal;
+                            return Some(EngineAction::Vim(VimAction::Operate {
+                                _op: op,
+                                _motion: Motion::CharRight, // Placeholder - will use selection.
+                                _count: 1,
+                            }));
                         }
                     }
                 }
 
                 if let KeyEvent::Esc = key {
                     self.mode = Normal;
-                    return Some(VimAction::ChangeMode(Normal));
+                    return Some(EngineAction::Vim(VimAction::ChangeMode(Normal)));
                 }
 
                 None
@@ -207,6 +210,7 @@ pub enum KeyEvent {
     Key {
         key: keyboard::Key,
         text: Option<String>,
+        modifiers: Modifiers,
     },
     Esc,
     Backspace,

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use atlas_engine::VimMode;
+use atlas_engine::{Message, VimMode};
+use iced::keyboard::Key;
 
-use crate::{Motion, Operator, VimAction};
+use crate::{EngineAction, KeyEvent, Motion, Operator, VimAction};
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum KeyAction {
@@ -10,9 +11,10 @@ pub enum KeyAction {
     KeyOperator(Operator),
     Command(VimAction),
     Custom(fn() -> VimAction),
+    AppCommand(Message),
 }
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Keymap {
     bindings: HashMap<(VimMode, String), KeyAction>,
     multi_key_buffer: String,
@@ -37,10 +39,14 @@ impl Keymap {
     pub fn handle_key(
         &mut self,
         mode: &VimMode,
-        key: char,
+        key: &KeyEvent,
         count: Option<usize>,
-    ) -> Option<VimAction> {
-        self.multi_key_buffer.push(key);
+    ) -> Option<EngineAction> {
+        let key_str = self.key_to_string(key);
+        if key_str.is_empty() {
+            return None;
+        }
+        self.multi_key_buffer.push_str(&key_str);
 
         // Check for exact match.
         if let Some(action) = self
@@ -65,18 +71,56 @@ impl Keymap {
         }
     }
 
-    fn create_action(&self, action: &KeyAction, count: usize) -> VimAction {
+    fn key_to_string(&self, key: &KeyEvent) -> String {
+        if let KeyEvent::Key { key, modifiers, .. } = key {
+            let mut s = String::new();
+
+            let key_char = match key.as_ref() {
+                Key::Character(c) => Some(c.to_lowercase()),
+                _ => None,
+            };
+
+            if modifiers.control() {
+                s.push_str("<C-");
+            }
+            if modifiers.alt() {
+                s.push_str("<A-");
+            }
+            if modifiers.shift() {
+                s.push_str("<S-");
+            }
+
+            if let Some(c) = key_char {
+                s.push_str(&c);
+            }
+
+            if s.len() > 1 && s.starts_with('<') {
+                s.push('>');
+            }
+
+            if s.len() <= 2 && s.ends_with('>') {
+                return String::new();
+            }
+
+            s
+        } else {
+            String::new()
+        }
+    }
+
+    fn create_action(&self, action: &KeyAction, count: usize) -> EngineAction {
         match action {
-            KeyAction::KeyMotion(motion) => VimAction::Move {
+            KeyAction::KeyMotion(motion) => EngineAction::Vim(VimAction::Move {
                 motion: motion.clone(),
                 count,
-            },
+            }),
             KeyAction::KeyOperator(_) => {
                 // NOTE: This would be handled differently - operators need motions.
                 todo!("Handle operators with keymap")
             }
-            KeyAction::Command(cmd) => cmd.clone(),
-            KeyAction::Custom(func) => func(),
+            KeyAction::Command(cmd) => EngineAction::Vim(cmd.clone()),
+            KeyAction::Custom(func) => EngineAction::Vim(func()),
+            KeyAction::AppCommand(msg) => EngineAction::App(msg.clone()),
         }
     }
 
@@ -114,6 +158,7 @@ impl Keymap {
         // Testing multiple cursors.
         self.set(Normal, "C", Command(VimAction::AddCursor));
         self.set(Normal, "R", Command(VimAction::RemoveSecondaryCursors));
+        self.set(Normal, "<C-s>", AppCommand(Message::SplitHorizontal));
 
         // Multi-key bindings.
         self.set(
