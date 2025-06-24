@@ -1,79 +1,69 @@
-// TODO: Vim operators -> "dd" is a good start but we should stop there and move on for now.
-// TODO: File loading/saving.
-// TODO: Command mode.
-// TODO: Multiple buffer support - Buffer management.
-// TODO: Multiple windows - Split view (horizontal/vertical), should be infinite splits btw.
-// TODO: Status line.
-// TODO: Line number.
-// TODO: Syntax Highlighting.
-// TODO: Split views.
-// TODO: Multiple cursors - Helix/Zed style.
-// TODO: LSP.
-// TODO: Advanced vim features.
-// TODO?: Completion engine.
-
 use atlas_engine::Message;
 use atlas_widgets::editor::Editor;
-use iced::{Element, widget::Row};
+use iced::widget::pane_grid;
+use iced::{
+    Element,
+    widget::pane_grid::{Axis, Pane},
+};
 
 /// Main application structure.
 /// Manages the overall editor state and handles high-level operations.
 pub struct Atlas {
-    editors: Vec<Editor>,
-    active_editor: usize,
+    panes: pane_grid::State<Editor>,
+    active_pane: Pane,
 }
 
 impl Default for Atlas {
     fn default() -> Self {
+        let (panes, first_editor) = pane_grid::State::new(Editor::new());
+
         Self {
-            editors: vec![Editor::new()],
-            active_editor: 0,
+            panes,
+            active_pane: first_editor,
         }
     }
 }
 
 impl Atlas {
-    /// Generates the window title based on the active buffer
+    /// Generates the window title based on the active buffer.
     fn title(&self) -> String {
-        format!(
-            "Atlas - {}",
-            self.editors[self.active_editor].buffer.borrow().name
-        )
+        "Atlas".into()
     }
 
-    /// Handles all editor actions and updates state accordingly
+    /// Handles all editor actions and updates state accordingly.
     fn update(&mut self, message: Message) {
         match message {
+            Message::SplitVertical => {
+                self.panes
+                    .split(Axis::Vertical, self.active_pane, Editor::new());
+            }
             Message::SplitHorizontal => {
-                let new_editor = self.editors[self.active_editor].clone();
-                self.editors.push(new_editor);
-                self.active_editor = self.editors.len() - 1;
-                self.editors[self.active_editor].is_focused = true;
+                self.panes
+                    .split(Axis::Horizontal, self.active_pane, Editor::new());
             }
             Message::Quit => {
                 std::process::exit(0);
             }
-            Message::FocusEditor(editor_id) => {
-                if editor_id < self.editors.len() {
-                    self.active_editor = editor_id;
-                }
+            Message::PaneClicked(pane) => self.active_pane = pane,
+            Message::Dragged(_) => {
+                println!("do we even care about this one?");
+            }
+            Message::Resized(resize_event) => {
+                self.panes.resize(resize_event.split, resize_event.ratio);
             }
         }
     }
 
-    /// Renders the entire editor interface
+    /// Renders the entire editor interface.
     fn view(&self) -> Element<Message> {
-        let mut row = Row::new();
-
-        for (index, editor) in self.editors.iter().enumerate() {
-            let is_focused = index == self.active_editor;
-
-            // NOTE: Is cloning the editor like this really a good idea?
-            let configured_editor = editor.clone().focused(is_focused);
-            row = row.push(configured_editor);
-        }
-
-        row.into()
+        pane_grid(&self.panes, |pane_id, editor, _| {
+            let elem: Element<_> = editor.clone().focused(pane_id == self.active_pane).into();
+            pane_grid::Content::new(elem)
+        })
+        .on_click(Message::PaneClicked)
+        .on_drag(Message::Dragged)
+        .on_resize(6, Message::Resized)
+        .into()
     }
 }
 

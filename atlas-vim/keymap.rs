@@ -5,7 +5,7 @@ use iced::keyboard::Key;
 
 use crate::{EngineAction, KeyEvent, Motion, Operator, VimAction};
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone)]
 pub enum KeyAction {
     KeyMotion(Motion),
     KeyOperator(Operator),
@@ -158,7 +158,10 @@ impl Keymap {
         // Testing multiple cursors.
         self.set(Normal, "C", Command(VimAction::AddCursor));
         self.set(Normal, "R", Command(VimAction::RemoveSecondaryCursors));
-        self.set(Normal, "<C-s>", AppCommand(Message::SplitHorizontal));
+
+        // Window splitting.
+        self.set(Normal, "<C-v>", AppCommand(Message::SplitVertical));
+        self.set(Normal, "<C-h>", AppCommand(Message::SplitHorizontal));
 
         // Multi-key bindings.
         self.set(

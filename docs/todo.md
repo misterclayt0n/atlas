@@ -1,0 +1,17 @@
+- Vim operators -> "dd" is a good start but we should stop there and move on for now.
+- File loading/saving.
+- Command mode.
+- Multiple buffer support - Buffer management.
+- Multiple windows: We're currently using iced's panes to manage that. But there's a couple of adjustments to do in regard to the impl: 
+    - No shared buffers currently, we just clone things in new panes.
+    - Cursor position is not stored in between panes, so when I focus on another pane, the cursor draws at the beginning of the file.
+    - Scrolling feels off, but I assume that does not have to do with panes themselves.
+    - Do we care about dragging?
+- Status line.
+- Line number.
+- Syntax Highlighting.
+- Split views.
+- Multiple cursors - Helix/Zed style.
+- LSP.
+- Advanced vim features.
+- Completion engine.

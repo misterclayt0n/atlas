@@ -75,7 +75,7 @@ pub enum VimAction {
     RemoveSecondaryCursors,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum EngineAction {
     Vim(VimAction),
     App(Message),

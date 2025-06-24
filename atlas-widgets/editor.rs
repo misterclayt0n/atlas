@@ -33,7 +33,7 @@ pub struct Editor {
 
 #[derive(Default, Debug)]
 struct EditorState {
-    // Cached values
+    // Cached values.
     char_width: Option<f32>,
     line_height: Option<f32>,
     bounds: Rectangle,
@@ -120,7 +120,7 @@ impl Editor {
         let bottom_limit =
             self.scroll_offset.y + bounds.height - (Self::MARGIN_LINES + 1) as f32 * line_height;
 
-        // Vertical scrolling
+        // Vertical scrolling.
         if cursor_y < top_limit {
             self.scroll_offset.y = (cursor_y - Self::MARGIN_LINES as f32 * line_height).max(0.0);
         } else if cursor_y > bottom_limit {
@@ -133,7 +133,7 @@ impl Editor {
         let right_limit =
             self.scroll_offset.x + bounds.width - (Self::MARGIN_COL + 1) as f32 * char_width;
 
-        // Horizontal scrolling
+        // Horizontal scrolling.
         if cursor_x < left_limit {
             self.scroll_offset.x = (cursor_x - Self::MARGIN_COL as f32 * char_width).max(0.0);
         } else if cursor_x > right_limit {
@@ -237,13 +237,13 @@ impl Editor {
                 let selection_color = Color::from_rgba(0.3, 0.5, 0.8, 0.3);
 
                 if start.line == end.line {
-                    // Single line selection
+                    // Single line selection.
                     let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
                     let start_y =
                         bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
                     let mut width = (end.col - start.col) as f32 * char_width;
 
-                    // Ensure minimum width for empty selections (like newlines)
+                    // Ensure minimum width for empty selections (like newlines).
                     if width < char_width * 0.5 {
                         width = char_width * 0.5;
                     }
@@ -263,18 +263,18 @@ impl Editor {
                         selection_color,
                     );
                 } else {
-                    // Multi-line selection
+                    // Multi-line selection.
                     for line in start.line..=end.line {
                         let line_y = bounds.y + (line as f32 * line_height - self.scroll_offset.y);
 
                         let (start_col, end_col) = if line == start.line {
-                            // First line: from start position to end of line
+                            // First line: from start position to end of line.
                             (start.col, self.buffer.borrow().grapheme_len(line))
                         } else if line == end.line {
-                            // Last line: from beginning to end position
+                            // Last line: from beginning to end position.
                             (0, end.col)
                         } else {
-                            // Middle lines: entire line
+                            // Middle lines: entire line.
                             (0, self.buffer.borrow().grapheme_len(line))
                         };
 
@@ -282,7 +282,7 @@ impl Editor {
                             bounds.x + (start_col as f32 * char_width - self.scroll_offset.x);
                         let mut width = (end_col - start_col) as f32 * char_width;
 
-                        // For empty lines or zero-width selections, show at least a small highlight
+                        // For empty lines or zero-width selections, show at least a small highlight.
                         if width < char_width * 0.5 {
                             width = char_width * 0.5;
                         }
