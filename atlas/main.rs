@@ -51,6 +51,13 @@ impl Atlas {
             Message::Resized(resize_event) => {
                 self.panes.resize(resize_event.split, resize_event.ratio);
             }
+            Message::CloseSplit => {
+                if let Some((_removed_editor, sibling)) = self.panes.close(self.active_pane) {
+                    self.active_pane = sibling;
+                } else {
+                    println!("no split to close");
+                }
+            }
         }
     }
 

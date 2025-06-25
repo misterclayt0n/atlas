@@ -22,5 +22,6 @@ pub enum Message {
     PaneClicked(Pane),
     Dragged(pane_grid::DragEvent),
     Resized(pane_grid::ResizeEvent),
+    CloseSplit,
     Quit,
 }

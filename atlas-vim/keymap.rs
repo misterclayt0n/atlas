@@ -162,6 +162,10 @@ impl Keymap {
         // Window splitting.
         self.set(Normal, "<C-v>", AppCommand(Message::SplitVertical));
         self.set(Normal, "<C-h>", AppCommand(Message::SplitHorizontal));
+        self.set(Normal, "<C-w>", AppCommand(Message::CloseSplit));
+
+        // Quit atlas.
+        self.set(Normal, "<C-q>", AppCommand(Message::Quit));
 
         // Multi-key bindings.
         self.set(
