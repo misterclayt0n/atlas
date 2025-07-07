@@ -266,13 +266,13 @@ pub fn execute(action: Action, buffer: &mut Buffer, multi_cursor: &mut MultiCurs
 
 fn apply_motion(motion: Motion, buffer: &Buffer, multi_cursor: &mut MultiCursor, editor_mode: &EditorMode) {
     match motion {
-        Motion::CharLeft => multi_cursor.move_left(buffer),
+        Motion::CharLeft => multi_cursor.move_left(buffer, editor_mode),
         Motion::CharRight => multi_cursor.move_right(buffer, editor_mode),
         Motion::CharUp => multi_cursor.move_up(buffer, editor_mode),
         Motion::CharDown => multi_cursor.move_down(buffer, editor_mode),
-        Motion::NextWordStart(big_word) => multi_cursor.move_word_forward(buffer, big_word),
-        Motion::PrevWord(big_word) => multi_cursor.move_word_backward(buffer, big_word),
-        Motion::NextWordEnd(big_word) => multi_cursor.move_word_end(buffer, big_word),
+        Motion::NextWordStart(big_word) => multi_cursor.move_word_forward(buffer, big_word, editor_mode),
+        Motion::PrevWord(big_word) => multi_cursor.move_word_backward(buffer, big_word, editor_mode),
+        Motion::NextWordEnd(big_word) => multi_cursor.move_word_end(buffer, big_word, editor_mode),
         Motion::ToLineStart => println!("Line start"),
         Motion::_ToLineEnd => todo!(),
     }

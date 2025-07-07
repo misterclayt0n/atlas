@@ -1,7 +1,7 @@
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::cursor::TextPosition;
+use crate::cursor::{MoveOpts, TextPosition};
 
 /// Represents a text buffer in the editor.
 /// Handles the actual content storage and text manipulation operations.
@@ -171,7 +171,7 @@ impl Buffer {
             // Move this cursor to the position after the inserted character.
             let new_pos = TextPosition::new(pos.line, pos.col + 1, pos.offset + 1);
             self.validate_position(&new_pos);
-            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+            multi_cursor.cursors[idx].move_to(new_pos, MoveOpts { anchor: None, update_preferred_col: true}, self);
 
             // Update positions of all other cursors affected by this insertion.
             self.update_cursors_after_modification(multi_cursor, pos.offset, 1, idx);
@@ -202,8 +202,8 @@ impl Buffer {
                 )
             };
             self.validate_position(&new_pos);
-            multi_cursor.cursors[idx].move_to_position(new_pos, self);
-
+            multi_cursor.cursors[idx].move_to(new_pos, MoveOpts { anchor: None, update_preferred_col: true}, self);
+            
             // Update positions of all other cursors affected by this insertion.
             self.update_cursors_after_modification(multi_cursor, pos.offset, char_count as isize, idx);
         });
@@ -231,7 +231,7 @@ impl Buffer {
             let new_pos = TextPosition::new(new_line, new_col, new_offset);
 
             self.validate_position(&new_pos);
-            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+            multi_cursor.cursors[idx].move_to(new_pos, MoveOpts { anchor: None, update_preferred_col: true}, self);
 
             // Update positions of all other cursors affected by this deletion.
             self.update_cursors_after_modification(
@@ -281,7 +281,7 @@ impl Buffer {
             let new_pos = TextPosition::new(new_line, 0, new_offset);
             self.validate_position(&new_pos);
 
-            multi_cursor.cursors[idx].move_to_position(new_pos, self);
+            multi_cursor.cursors[idx].move_to(new_pos, MoveOpts { anchor: None, update_preferred_col: true}, self);
 
             // Update positions of all other cursors affected by this insertion.
             self.update_cursors_after_modification(multi_cursor, pos.offset, 1, idx);
@@ -331,7 +331,7 @@ impl Buffer {
                     updated_pos.col = updated_pos.offset - line_start;
 
                     self.validate_position(&updated_pos);
-                    cursor.move_to_position(updated_pos, self);
+                    cursor.move_to(updated_pos, MoveOpts { anchor: None, update_preferred_col: false}, self);
                 }
             }
         }

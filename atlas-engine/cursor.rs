@@ -5,29 +5,9 @@ use crate::EditorMode;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
-    state: CursorState,
+    anchor: TextPosition,            // Where the selection starts.
+    active: TextPosition,            // Where it is currently.
     preferred_column: Option<usize>, // Global preferred column for all modes.
-}
-
-/// Represents the cursor state in the editor.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum CursorState {
-    /// Single cursor position.
-    Normal { position: TextPosition },
-
-    /// Text selection with start and end positions.
-    Selection {
-        anchor: TextPosition, // Where it starts.
-        active: TextPosition, // Where it is currently.
-    },
-}
-
-impl Default for CursorState {
-    fn default() -> Self {
-        Self::Normal {
-            position: TextPosition::default(),
-        }
-    }
 }
 
 /// Represents a position in the text buffer.
@@ -45,6 +25,15 @@ enum CharClass {
     Punctuation,
 }
 
+/// How the cursor move should behave.
+#[derive(Default, Clone, Copy)]
+pub struct MoveOpts {
+    /// If `Some(anchor)` we keep / start a selection from `anchor` to `dest`.
+    /// If `None` the selection is collapsed at `dest`.
+    pub anchor: Option<TextPosition>,
+    pub update_preferred_col: bool,
+}
+
 fn get_char_class(c: char, big_word: bool) -> CharClass {
     if c.is_whitespace() {
         CharClass::Whitespace
@@ -57,21 +46,17 @@ fn get_char_class(c: char, big_word: bool) -> CharClass {
 
 impl Cursor {
     pub fn new() -> Self {
-        // This never starts with selection.
+        let pos = TextPosition::default();
+
         Self {
-            state: CursorState::Normal {
-                position: TextPosition::default(),
-            },
             preferred_column: None,
+            anchor: pos,
+            active: pos,
         }
     }
 
-    /// Get the current position regardless of the cursor type
     pub fn position(&self) -> TextPosition {
-        match &self.state {
-            CursorState::Normal { position } => *position,
-            CursorState::Selection { active, .. } => *active,
-        }
+        self.active
     }
 
     /// Converts cursor position to screen coordinates.
@@ -91,51 +76,21 @@ impl Cursor {
         Point::new(pos.col as f32 * char_width, pos.line as f32 * line_height)
     }
 
-    /// Start selection from current position.
-    pub fn start_selection(&mut self) {
-        if let CursorState::Normal { position } = self.state {
-            self.state = CursorState::Selection {
-                anchor: position,
-                active: position,
-            };
-        } else {
-            unreachable!("start_selection called on non normal cursor");
-        }
+    pub fn collapse_selection(&mut self) {
+        self.anchor = self.active;
     }
 
-    /// Clear any active selection.
-    pub fn clear_selection(&mut self) {
-        if let CursorState::Selection { active, .. } = self.state {
-            self.state = CursorState::Normal { position: active };
-        } else {
-            unreachable!("clear_selection called on non normal cursor");
-        }
-    }
-
-    /// Check if cursor is in selection mode.
+    /// A selection exists if the anchor and active positions are different.
     pub fn has_selection(&self) -> bool {
-        matches!(&self.state, CursorState::Selection { .. })
+        self.anchor != self.active
     }
 
     /// Get selection range if in selection mode.
-    pub fn get_selection(&self) -> Option<(TextPosition, TextPosition)> {
-        if let CursorState::Selection { anchor, active } = &self.state {
-            // NOTE: In visual mode, selection is always inclusive of both anchor and active positions.
-            // That's why we adjust the end position to include the character under the cursor.
-            let (start, mut end) = if anchor.offset <= active.offset {
-                (*anchor, *active)
-            } else {
-                (*active, *anchor)
-            };
-
-            // Make the selection inclusive by extending the end position by 1.
-            // This ensures the character under the cursor is always highlighted.
-            end.col += 1;
-            end.offset += 1;
-
-            Some((start, end))
+    pub fn get_selection_range(&self) -> (TextPosition, TextPosition) {
+        if self.anchor.offset <= self.active.offset {
+            (self.anchor, self.active)
         } else {
-            None
+            (self.active, self.anchor)
         }
     }
 
@@ -143,7 +98,7 @@ impl Cursor {
     // Movement
     //
 
-    pub fn move_left(&mut self, buffer: &Buffer) -> Option<TextPosition> {
+    pub fn move_left(&mut self, buffer: &Buffer, editor_mode: &EditorMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -157,12 +112,24 @@ impl Cursor {
 
         buffer.validate_position(&new_pos);
 
-        self.set_position(new_pos, true);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { None },
+                update_preferred_col: true,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
 
-    pub fn move_right(&mut self, buffer: &Buffer, editor_mode: &EditorMode) -> Option<TextPosition> {
+    pub fn move_right(
+        &mut self,
+        buffer: &Buffer,
+        editor_mode: &EditorMode,
+    ) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -179,7 +146,15 @@ impl Cursor {
         let new_pos = TextPosition::new(cur.line, new_col, new_off);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, true);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { None },
+                update_preferred_col: true,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
@@ -201,7 +176,15 @@ impl Cursor {
         let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, false);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { None },
+                update_preferred_col: false,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
@@ -223,18 +206,26 @@ impl Cursor {
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, false);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { None },
+                update_preferred_col: false,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
 
-    pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+    pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
-        let cur = self.position();
+        let initial_pos = self.position();
 
-        buffer.validate_position(&cur);
+        buffer.validate_position(&initial_pos);
 
-        let line_start = buffer.content.line_to_char(cur.line);
+        let line_start = buffer.content.line_to_char(initial_pos.line);
 
         assert!(
             line_start <= total_chars,
@@ -243,7 +234,7 @@ impl Cursor {
             total_chars
         );
 
-        let mut char_idx = line_start + cur.col;
+        let mut char_idx = line_start + initial_pos.col;
 
         // If we're at or beyond the end of the buffer, no movement is possible.
         if char_idx >= total_chars {
@@ -295,18 +286,27 @@ impl Cursor {
         let new_pos = TextPosition::new(new_line, new_col, char_idx);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, true);
+        
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
+                update_preferred_col: true,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
 
-    pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+    pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
-        let cur = self.position();
+        let initial_pos = self.position();
 
-        buffer.validate_position(&cur);
+        buffer.validate_position(&initial_pos);
 
-        let line_start = buffer.content.line_to_char(cur.line);
+        let line_start = buffer.content.line_to_char(initial_pos.line);
 
         assert!(
             line_start <= total_chars,
@@ -315,7 +315,7 @@ impl Cursor {
             total_chars
         );
 
-        let mut char_idx = line_start + cur.col;
+        let mut char_idx = line_start + initial_pos.col;
 
         if char_idx == 0 {
             return None;
@@ -368,19 +368,27 @@ impl Cursor {
         let new_pos = TextPosition::new(new_line, new_col, char_idx);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, true);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
+                update_preferred_col: true,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
 
-    pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool) -> Option<TextPosition> {
+    pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
-        let cur = self.position();
+        let initial_pos = self.position();
 
-        buffer.validate_position(&cur);
+        buffer.validate_position(&initial_pos);
 
-        let line_start = buffer.content.line_to_char(cur.line);
-        let mut char_idx = line_start + cur.col;
+        let line_start = buffer.content.line_to_char(initial_pos.line);
+        let mut char_idx = line_start + initial_pos.col;
 
         if char_idx >= total_chars {
             return None;
@@ -429,54 +437,53 @@ impl Cursor {
         let new_pos = TextPosition::new(new_line, new_col, last_char_index);
 
         buffer.validate_position(&new_pos);
-        self.set_position(new_pos, true);
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            new_pos,
+            MoveOpts {
+                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
+                update_preferred_col: true,
+            },
+            buffer,
+        );
 
         Some(new_pos)
     }
 
-    pub fn move_to_position(&mut self, pos: TextPosition, buffer: &Buffer) -> Option<TextPosition> {
-        buffer.validate_position(&pos);
+    /// Move the cursor to `dest`, optionally extend / collapse selection and update `preferred_col`.
+    ///
+    /// Returns the clamped position that was finally reached (or `None` if the move is impossible - e.g.
+    /// off the left edge of the buffer).
+    pub fn move_to(
+        &mut self,
+        dest: TextPosition,
+        opts: MoveOpts,
+        buffer: &Buffer,
+    ) -> Option<TextPosition> {
+        buffer.validate_position(&dest);
 
-        let line = pos.line.min(buffer.content.len_lines().saturating_sub(1));
-        let col = pos.col.min(buffer.grapheme_len(line));
+        let line = dest.line.min(buffer.content.len_lines().saturating_sub(1));
+        let col = dest.col.min(buffer.grapheme_len(line));
         let off = buffer.grapheme_col_to_offset(line, col);
-        let new_pos = TextPosition::new(line, col, off);
-        buffer.validate_position(&new_pos);
+        let dest = TextPosition::new(line, col, off);
+        buffer.validate_position(&dest);
 
-        self.set_position(new_pos, true);
+        self.active = dest;
+        self.anchor = opts.anchor.unwrap_or(dest);
+        if opts.update_preferred_col {
+            self.preferred_column = Some(dest.col);
+        }
 
-        Some(new_pos)
+        Some(dest)
     }
 
     //
     // Helpers
     //
 
-    fn set_position(&mut self, pos: TextPosition, update_preferred_col: bool) {
-        match &mut self.state {
-            CursorState::Normal { position } => {
-                *position = pos;
-                if update_preferred_col {
-                    self.preferred_column = Some(pos.col)
-                }
-            }
-            CursorState::Selection { active, .. } => {
-                *active = pos;
-                if update_preferred_col {
-                    self.preferred_column = Some(pos.col)
-                }
-            }
-        }
-    }
-
     pub fn adjust_for_mode(&mut self, buffer: &Buffer, editor_mode: &EditorMode) {
         match editor_mode {
             EditorMode::Normal => {
-                // Clear selection when entering Normal mode.
-                if self.has_selection() {
-                    self.clear_selection();
-                }
-
                 let cur = self.position();
                 let line_len = buffer.grapheme_len(cur.line);
                 if line_len > 0 && cur.col >= line_len {
@@ -484,21 +491,18 @@ impl Cursor {
                     let new_col = line_len - 1;
                     let new_off = buffer.grapheme_col_to_offset(cur.line, new_col);
                     let new_pos = TextPosition::new(cur.line, new_col, new_off);
-                    self.set_position(new_pos, true);
+                    self.move_to(
+                        new_pos,
+                        MoveOpts {
+                            anchor: None,
+                            update_preferred_col: true,
+                        },
+                        buffer,
+                    );
                 }
             }
-            EditorMode::Insert => {
-                // Clear selection when entering Insert mode.
-                if self.has_selection() {
-                    self.clear_selection();
-                }
-            }
-            EditorMode::Visual => {
-                // Start selection when entering Visual mode if we don't already have one.
-                if !self.has_selection() {
-                    self.start_selection();
-                }
-            }
+            // We only care for Normal mode here.
+            _ => {}
         }
     }
 
@@ -506,7 +510,11 @@ impl Cursor {
         match editor_mode {
             EditorMode::Normal | EditorMode::Visual => {
                 let line_len = buffer.grapheme_len(target);
-                if line_len == 0 { 0 } else { line_len - 1 }
+                if line_len == 0 {
+                    0
+                } else {
+                    line_len - 1
+                }
             }
             EditorMode::Insert => buffer.grapheme_len(target),
         }

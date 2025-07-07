@@ -1,4 +1,4 @@
-use crate::{Buffer, Cursor, TextPosition, EditorMode};
+use crate::{cursor::MoveOpts, Buffer, Cursor, EditorMode, TextPosition};
 
 /// A collection of `Cursor` objects that are moved/edited together.
 ///
@@ -119,7 +119,7 @@ impl MultiCursor {
     /// Add a new cursor at the provided text position.
     pub fn add_cursor(&mut self, pos: TextPosition, buffer: &Buffer) {
         let mut cursor = Cursor::new();
-        cursor.move_to_position(pos, buffer);
+        cursor.move_to(pos, MoveOpts { anchor: None, update_preferred_col: false}, buffer);
         self.cursors.push(cursor);
         self.merge_overlapping();
     }
@@ -139,13 +139,13 @@ impl MultiCursor {
     // Broadcast to all cursors.
     //
 
-    generate_cursor_methods!(move_left(buffer: &Buffer));
+    generate_cursor_methods!(move_left(buffer: &Buffer, mode: &EditorMode));
     generate_cursor_methods!(move_right(buffer: &Buffer, mode: &EditorMode));
     generate_cursor_methods!(move_up(buffer: &Buffer, mode: &EditorMode));
     generate_cursor_methods!(move_down(buffer: &Buffer, mode: &EditorMode));
-    generate_cursor_methods!(move_word_forward(buffer: &Buffer, big_word: bool));
-    generate_cursor_methods!(move_word_backward(buffer: &Buffer, big_word: bool));
-    generate_cursor_methods!(move_word_end(buffer: &Buffer, big_word: bool));
+    generate_cursor_methods!(move_word_forward(buffer: &Buffer, big_word: bool, mode: &EditorMode));
+    generate_cursor_methods!(move_word_backward(buffer: &Buffer, big_word: bool, mode: &EditorMode));
+    generate_cursor_methods!(move_word_end(buffer: &Buffer, big_word: bool, mode: &EditorMode));
 
     generate_cursor_methods!(no_merge adjust_for_mode(buffer: &Buffer, mode: &EditorMode));
 
@@ -185,7 +185,7 @@ impl MultiCursor {
             let correct_offset = buffer.grapheme_col_to_offset(pos.line, pos.col);
             if pos.offset != correct_offset {
                 let new_pos = TextPosition::new(pos.line, pos.col, correct_offset);
-                cursor.move_to_position(new_pos, buffer);
+                cursor.move_to(new_pos, MoveOpts { anchor: None, update_preferred_col: false }, buffer);
             }
         }
     }

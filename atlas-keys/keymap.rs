@@ -136,11 +136,11 @@ impl Keymap {
 
         // Word movements.
         self.set(Normal, "w", KeyMotion(Motion::NextWordStart(false)));
-        self.set(Normal, "W", KeyMotion(Motion::NextWordStart(true)));
+        self.set(Normal, "<S-w>", KeyMotion(Motion::NextWordStart(true)));
         self.set(Normal, "b", KeyMotion(Motion::PrevWord(false)));
-        self.set(Normal, "B", KeyMotion(Motion::PrevWord(true)));
+        self.set(Normal, "<S-b>", KeyMotion(Motion::PrevWord(true)));
         self.set(Normal, "e", KeyMotion(Motion::NextWordEnd(false)));
-        self.set(Normal, "E", KeyMotion(Motion::NextWordEnd(true)));
+        self.set(Normal, "<S-e>", KeyMotion(Motion::NextWordEnd(true)));
 
         // Mode changes.
         self.set(Normal, "i", Command(Action::ChangeMode(Insert)));
@@ -156,8 +156,8 @@ impl Keymap {
         self.set(Normal, "c", KeyOperator(Operator::Change));
 
         // Testing multiple cursors.
-        self.set(Normal, "C", Command(Action::AddCursor));
-        self.set(Normal, "R", Command(Action::RemoveSecondaryCursors));
+        self.set(Normal, "<S-c>", Command(Action::AddCursor));
+        self.set(Normal, "<S-r>", Command(Action::RemoveSecondaryCursors));
 
         // Window splitting.
         self.set(Normal, "<C-v>", AppCommand(Message::SplitVertical));
