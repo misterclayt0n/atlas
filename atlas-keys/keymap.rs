@@ -1,22 +1,22 @@
 use std::collections::HashMap;
 
-use atlas_engine::{Message, VimMode};
+use atlas_engine::{Message, EditorMode};
 use iced::keyboard::Key;
 
-use crate::{EngineAction, KeyEvent, Motion, Operator, VimAction};
+use crate::{EngineAction, KeyEvent, Motion, Operator, Action};
 
 #[derive(Clone)]
 pub enum KeyAction {
     KeyMotion(Motion),
     KeyOperator(Operator),
-    Command(VimAction),
-    Custom(fn() -> VimAction),
+    Command(Action),
+    Custom(fn() -> Action),
     AppCommand(Message),
 }
 
 #[derive(Default, Clone)]
 pub struct Keymap {
-    bindings: HashMap<(VimMode, String), KeyAction>,
+    bindings: HashMap<(EditorMode, String), KeyAction>,
     multi_key_buffer: String,
 }
 
@@ -27,18 +27,18 @@ impl Keymap {
             multi_key_buffer: String::new(),
         };
 
-        // Set up default vim bindings.
+        // Set up default bindings.
         keymap.setup_defaults();
         keymap
     }
 
-    pub fn set(&mut self, mode: VimMode, keys: &str, action: KeyAction) {
+    pub fn set(&mut self, mode: EditorMode, keys: &str, action: KeyAction) {
         self.bindings.insert((mode, keys.to_string()), action);
     }
 
     pub fn handle_key(
         &mut self,
-        mode: &VimMode,
+        mode: &EditorMode,
         key: &KeyEvent,
         count: Option<usize>,
     ) -> Option<EngineAction> {
@@ -110,7 +110,7 @@ impl Keymap {
 
     fn create_action(&self, action: &KeyAction, count: usize) -> EngineAction {
         match action {
-            KeyAction::KeyMotion(motion) => EngineAction::Vim(VimAction::Move {
+            KeyAction::KeyMotion(motion) => EngineAction::Action(Action::Move {
                 motion: motion.clone(),
                 count,
             }),
@@ -118,15 +118,15 @@ impl Keymap {
                 // NOTE: This would be handled differently - operators need motions.
                 todo!("Handle operators with keymap")
             }
-            KeyAction::Command(cmd) => EngineAction::Vim(cmd.clone()),
-            KeyAction::Custom(func) => EngineAction::Vim(func()),
+            KeyAction::Command(cmd) => EngineAction::Action(cmd.clone()),
+            KeyAction::Custom(func) => EngineAction::Action(func()),
             KeyAction::AppCommand(msg) => EngineAction::App(msg.clone()),
         }
     }
 
     fn setup_defaults(&mut self) {
         use KeyAction::*;
-        use VimMode::*;
+        use EditorMode::*;
 
         // Basic movements.
         self.set(Normal, "h", KeyMotion(Motion::CharLeft));
@@ -143,12 +143,12 @@ impl Keymap {
         self.set(Normal, "E", KeyMotion(Motion::NextWordEnd(true)));
 
         // Mode changes.
-        self.set(Normal, "i", Command(VimAction::ChangeMode(Insert)));
-        self.set(Normal, "v", Command(VimAction::ChangeMode(Visual)));
+        self.set(Normal, "i", Command(Action::ChangeMode(Insert)));
+        self.set(Normal, "v", Command(Action::ChangeMode(Visual)));
 
         // Other commands.
-        self.set(Normal, "x", Command(VimAction::Delete));
-        self.set(Normal, ".", Command(VimAction::RepeatLast));
+        self.set(Normal, "x", Command(Action::Delete));
+        self.set(Normal, ".", Command(Action::RepeatLast));
 
         // Operators.
         self.set(Normal, "d", KeyOperator(Operator::Delete));
@@ -156,8 +156,8 @@ impl Keymap {
         self.set(Normal, "c", KeyOperator(Operator::Change));
 
         // Testing multiple cursors.
-        self.set(Normal, "C", Command(VimAction::AddCursor));
-        self.set(Normal, "R", Command(VimAction::RemoveSecondaryCursors));
+        self.set(Normal, "C", Command(Action::AddCursor));
+        self.set(Normal, "R", Command(Action::RemoveSecondaryCursors));
 
         // Window splitting.
         self.set(Normal, "<C-v>", AppCommand(Message::SplitVertical));
@@ -171,7 +171,7 @@ impl Keymap {
         self.set(
             Normal,
             "gg",
-            Custom(|| VimAction::Move {
+            Custom(|| Action::Move {
                 motion: Motion::ToLineStart,
                 count: 1,
             }),

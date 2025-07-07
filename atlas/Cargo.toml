@@ -11,4 +11,4 @@ path = "main.rs"
 iced.workspace     = true
 atlas-widgets.path = "../atlas-widgets"
 atlas-engine.path  = "../atlas-engine"
-atlas-vim.path     = "../atlas-vim"
+atlas-keys.path    = "../atlas-keys"

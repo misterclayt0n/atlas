@@ -275,7 +275,7 @@ name = "atlas"
 version = "0.1.0"
 dependencies = [
  "atlas-engine",
- "atlas-vim",
+ "atlas-keys",
  "atlas-widgets",
  "iced",
 ]
@@ -290,7 +290,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "atlas-vim"
+name = "atlas-keys"
 version = "0.1.0"
 dependencies = [
  "atlas-engine",
@@ -302,7 +302,7 @@ name = "atlas-widgets"
 version = "0.1.0"
 dependencies = [
  "atlas-engine",
- "atlas-vim",
+ "atlas-keys",
  "iced",
  "iced_graphics",
 ]

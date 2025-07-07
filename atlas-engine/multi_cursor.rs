@@ -1,4 +1,4 @@
-use crate::{Buffer, Cursor, TextPosition, VimMode};
+use crate::{Buffer, Cursor, TextPosition, EditorMode};
 
 /// A collection of `Cursor` objects that are moved/edited together.
 ///
@@ -140,14 +140,14 @@ impl MultiCursor {
     //
 
     generate_cursor_methods!(move_left(buffer: &Buffer));
-    generate_cursor_methods!(move_right(buffer: &Buffer, mode: &VimMode));
-    generate_cursor_methods!(move_up(buffer: &Buffer, mode: &VimMode));
-    generate_cursor_methods!(move_down(buffer: &Buffer, mode: &VimMode));
+    generate_cursor_methods!(move_right(buffer: &Buffer, mode: &EditorMode));
+    generate_cursor_methods!(move_up(buffer: &Buffer, mode: &EditorMode));
+    generate_cursor_methods!(move_down(buffer: &Buffer, mode: &EditorMode));
     generate_cursor_methods!(move_word_forward(buffer: &Buffer, big_word: bool));
     generate_cursor_methods!(move_word_backward(buffer: &Buffer, big_word: bool));
     generate_cursor_methods!(move_word_end(buffer: &Buffer, big_word: bool));
 
-    generate_cursor_methods!(no_merge adjust_for_mode(buffer: &Buffer, mode: &VimMode));
+    generate_cursor_methods!(no_merge adjust_for_mode(buffer: &Buffer, mode: &EditorMode));
 
     /// After any mutation we call this function to ensure we do not have two
     /// cursors in exactly the same location. If that happens we keep the

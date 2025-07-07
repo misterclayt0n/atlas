@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use atlas_engine::{Buffer, Message, MultiCursor, VimMode};
-use atlas_vim::{KeyEvent, VimEngine, execute};
+use atlas_engine::{Buffer, Message, MultiCursor, EditorMode};
+use atlas_keys::{KeyEvent, KeyEngine, execute};
 use iced::{
     Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
     advanced::{
@@ -27,7 +27,7 @@ pub struct Editor {
     pub buffer: SharedBuffer,
     pub multi_cursor: MultiCursor,
     pub scroll_offset: Point,
-    pub vim: VimEngine,
+    pub key_engine: KeyEngine,
     pub is_focused: bool,
 }
 
@@ -44,7 +44,7 @@ impl Default for Editor {
         Self {
             buffer: Rc::new(RefCell::new(Buffer::new("", "Atlas"))),
             multi_cursor: MultiCursor::default(),
-            vim: VimEngine::default(),
+            key_engine: KeyEngine::default(),
             scroll_offset: Point::new(0.0, 0.0),
             is_focused: false,
         }
@@ -146,7 +146,7 @@ impl Editor {
     // Drawing
     //
 
-    /// Draws the cursor depending upon the current vim mode.
+    /// Draws the cursor depending upon the current mode.
     fn draw_cursor(
         &self,
         renderer: &mut impl iced::advanced::text::Renderer,
@@ -161,14 +161,14 @@ impl Editor {
             return;
         }
 
-        let cursor_bounds = match self.vim.mode {
-            VimMode::Normal | VimMode::Visual => Rectangle {
+        let cursor_bounds = match self.key_engine.mode {
+            EditorMode::Normal | EditorMode::Visual => Rectangle {
                 x: position.x,
                 y: position.y,
                 width: char_width, // Block, basically.
                 height: line_height,
             },
-            VimMode::Insert => Rectangle {
+            EditorMode::Insert => Rectangle {
                 x: position.x,
                 y: position.y,
                 width: 2.0,
@@ -184,13 +184,13 @@ impl Editor {
             .get_char(cursor.position().offset)
             .unwrap_or(' ');
 
-        let cursor_background = match self.vim.mode {
-            VimMode::Normal | VimMode::Visual => Color::WHITE,
-            VimMode::Insert => Color::WHITE,
+        let cursor_background = match self.key_engine.mode {
+            EditorMode::Normal | EditorMode::Visual => Color::WHITE,
+            EditorMode::Insert => Color::WHITE,
         };
 
-        let text_color = match self.vim.mode {
-            VimMode::Normal | VimMode::Visual => Color::BLACK,
+        let text_color = match self.key_engine.mode {
+            EditorMode::Normal | EditorMode::Visual => Color::BLACK,
             _ => Color::WHITE,
         };
 
@@ -203,7 +203,7 @@ impl Editor {
         );
 
         // Draw character (for Normal/Visual modes) inside the cursor block.
-        if self.vim.mode != VimMode::Insert {
+        if self.key_engine.mode != EditorMode::Insert {
             renderer.fill_text(
                 Text {
                     content: char_under_cursor.to_string(),
@@ -498,16 +498,16 @@ where
                 }
 
                 let maybe_action = translate_to_keyevent(&key, &text, modifiers)
-                    .and_then(|ke| self.vim.handle_key(ke));
+                    .and_then(|ke| self.key_engine.handle_key(ke));
 
                 if let Some(action) = maybe_action {
                     match action {
-                        atlas_vim::EngineAction::Vim(vim_action) => {
+                        atlas_keys::EngineAction::Action(action) => {
                             execute(
-                                vim_action,
+                                action,
                                 &mut self.buffer.borrow_mut(),
                                 &mut self.multi_cursor,
-                                &self.vim.mode,
+                                &self.key_engine.mode,
                             );
                             self.ensure_cursor_visible(
                                 editor_state.bounds,
@@ -516,7 +516,7 @@ where
                             );
                             return event::Status::Captured;
                         }
-                        atlas_vim::EngineAction::App(app_action) => {
+                        atlas_keys::EngineAction::App(app_action) => {
                             shell.publish(app_action);
                             return event::Status::Captured;
                         }

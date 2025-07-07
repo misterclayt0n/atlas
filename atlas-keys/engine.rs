@@ -1,4 +1,4 @@
-use atlas_engine::{Buffer, VimMode, MultiCursor, Message};
+use atlas_engine::{Buffer, EditorMode, MultiCursor, Message};
 use iced::keyboard::{self, Key, Modifiers};
 
 use crate::keymap::Keymap;
@@ -54,7 +54,7 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub enum VimAction {
+pub enum Action {
     InsertChar(char),
     InsertText(String),
     InsertNewline,
@@ -67,7 +67,7 @@ pub enum VimAction {
         _motion: Motion,
         _count: usize,
     },
-    ChangeMode(VimMode),
+    ChangeMode(EditorMode),
     RepeatLast,
     Backspace,
     Delete,
@@ -77,31 +77,31 @@ pub enum VimAction {
 
 #[derive(Debug, Clone)]
 pub enum EngineAction {
-    Vim(VimAction),
+    Action(Action),
     App(Message),
 }
 
 #[derive(Clone)]
-pub struct VimEngine {
-    pub mode: VimMode,
+pub struct KeyEngine {
+    pub mode: EditorMode,
     keymap: Keymap,
-    last_edit: Option<VimAction>, // For ".".
+    last_edit: Option<Action>, // For ".".
 }
 
-impl Default for VimEngine {
+impl Default for KeyEngine {
     fn default() -> Self {
         Self {
-            mode: VimMode::Normal,
+            mode: EditorMode::Normal,
             keymap: Keymap::new(),
             last_edit: None,
         }
     }
 }
 
-impl VimEngine {
+impl KeyEngine {
     /// Returns at most **one** high-level action for the editor to execute.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<EngineAction> {
-        use VimMode::*;
+        use EditorMode::*;
         match self.mode {
             Insert => match key {
                 KeyEvent::Key { key, text, .. } => {
@@ -109,9 +109,9 @@ impl VimEngine {
                     if let Some(s) = text {
                         if !s.is_empty() {
                             for ch in s.chars() {
-                                self.last_edit = Some(VimAction::InsertChar(ch));
+                                self.last_edit = Some(Action::InsertChar(ch));
                             }
-                            return Some(EngineAction::Vim(VimAction::InsertText(s)));
+                            return Some(EngineAction::Action(Action::InsertText(s)));
                         }
                     }
 
@@ -120,8 +120,8 @@ impl VimEngine {
                         if s.len() == 1 {
                             let c = s.chars().next().unwrap();
                             if !c.is_control() {
-                                self.last_edit = Some(VimAction::InsertChar(c));
-                                return Some(EngineAction::Vim(VimAction::InsertChar(c)));
+                                self.last_edit = Some(Action::InsertChar(c));
+                                return Some(EngineAction::Action(Action::InsertChar(c)));
                             }
                         }
                     }
@@ -130,22 +130,22 @@ impl VimEngine {
 
                 KeyEvent::Esc => {
                     self.mode = Normal;
-                    Some(EngineAction::Vim(VimAction::ChangeMode(Normal)))
+                    Some(EngineAction::Action(Action::ChangeMode(Normal)))
                 }
-                KeyEvent::Backspace => Some(EngineAction::Vim(VimAction::Backspace)),
-                KeyEvent::Enter => Some(EngineAction::Vim(VimAction::InsertNewline)), // NOTE: Enter should likely be an action
+                KeyEvent::Backspace => Some(EngineAction::Action(Action::Backspace)),
+                KeyEvent::Enter => Some(EngineAction::Action(Action::InsertNewline)), // NOTE: Enter should likely be an action
             },
 
             Normal => {
                 if let Some(action) = self.keymap.handle_key(&self.mode, &key, None) {
-                    if let EngineAction::Vim(v_action) = &action {
+                    if let EngineAction::Action(v_action) = &action {
                         if matches!(
                             v_action,
-                            VimAction::InsertChar(_) | VimAction::Operate { .. }
+                            Action::InsertChar(_) | Action::Operate { .. }
                         ) {
                             self.last_edit = Some(v_action.clone());
                         }
-                        if let VimAction::ChangeMode(m) = &v_action {
+                        if let Action::ChangeMode(m) = &v_action {
                             self.mode = m.clone();
                         }
                     }
@@ -166,14 +166,14 @@ impl VimEngine {
 
                         // Handle movement in visual mode just like we do in normal mode.
                         if let Some(motion) = Motion::from_hjkl(c) {
-                            return Some(EngineAction::Vim(VimAction::Move { motion, count: 1 }));
+                            return Some(EngineAction::Action(Action::Move { motion, count: 1 }));
                         }
 
                         // Handle operators in visual mode, also just like we do it in normal mode.
                         if let Some(op) = Operator::from_char(c) {
                             // In visual mode, operators work on the selection.
                             self.mode = Normal;
-                            return Some(EngineAction::Vim(VimAction::Operate {
+                            return Some(EngineAction::Action(Action::Operate {
                                 _op: op,
                                 _motion: Motion::CharRight, // Placeholder - will use selection.
                                 _count: 1,
@@ -184,7 +184,7 @@ impl VimEngine {
 
                 if let KeyEvent::Esc = key {
                     self.mode = Normal;
-                    return Some(EngineAction::Vim(VimAction::ChangeMode(Normal)));
+                    return Some(EngineAction::Action(Action::ChangeMode(Normal)));
                 }
 
                 None
@@ -192,7 +192,7 @@ impl VimEngine {
         }
     }
 
-    pub fn _repeat_last(&self) -> Option<VimAction> {
+    pub fn _repeat_last(&self) -> Option<Action> {
         self.last_edit.clone()
     }
 
@@ -217,20 +217,20 @@ pub enum KeyEvent {
     Enter,
 }
 
-pub fn execute(action: VimAction, buffer: &mut Buffer, multi_cursor: &mut MultiCursor, vim_mode: &VimMode) {
+pub fn execute(action: Action, buffer: &mut Buffer, multi_cursor: &mut MultiCursor, editor_mode: &EditorMode) {
     match action {
-        VimAction::InsertChar(c) => buffer.insert_char(multi_cursor, c),
-        VimAction::InsertText(s) => buffer.insert_text(multi_cursor, s.as_str()),
-        VimAction::Move { motion, .. } => apply_motion(motion, buffer, multi_cursor, vim_mode),
-        VimAction::Operate { .. } => println!("Todo!"),
-        VimAction::ChangeMode(new_mode) => multi_cursor.adjust_for_mode(buffer, &new_mode),
-        VimAction::RepeatLast => println!("Handled by engine"),
-        VimAction::Backspace => buffer.backspace(multi_cursor),
-        VimAction::InsertNewline => buffer.insert_newline(multi_cursor),
-        VimAction::Delete => buffer.delete(multi_cursor),
+        Action::InsertChar(c) => buffer.insert_char(multi_cursor, c),
+        Action::InsertText(s) => buffer.insert_text(multi_cursor, s.as_str()),
+        Action::Move { motion, .. } => apply_motion(motion, buffer, multi_cursor, editor_mode),
+        Action::Operate { .. } => println!("Todo!"),
+        Action::ChangeMode(new_mode) => multi_cursor.adjust_for_mode(buffer, &new_mode),
+        Action::RepeatLast => println!("Handled by engine"),
+        Action::Backspace => buffer.backspace(multi_cursor),
+        Action::InsertNewline => buffer.insert_newline(multi_cursor),
+        Action::Delete => buffer.delete(multi_cursor),
         
         // MOCKED
-        VimAction::AddCursor => {
+        Action::AddCursor => {
             // Add a cursor one line below the primary cursor, or to the right if at last line.
             let current_pos = multi_cursor.position();
             let total_lines = buffer.content.len_lines();
@@ -260,16 +260,16 @@ pub fn execute(action: VimAction, buffer: &mut Buffer, multi_cursor: &mut MultiC
             multi_cursor.add_cursor(new_pos, buffer);
         },
         
-        VimAction::RemoveSecondaryCursors => multi_cursor.clear_secondary_cursors(),
+        Action::RemoveSecondaryCursors => multi_cursor.clear_secondary_cursors(),
     }
 }
 
-fn apply_motion(motion: Motion, buffer: &Buffer, multi_cursor: &mut MultiCursor, vim_mode: &VimMode) {
+fn apply_motion(motion: Motion, buffer: &Buffer, multi_cursor: &mut MultiCursor, editor_mode: &EditorMode) {
     match motion {
         Motion::CharLeft => multi_cursor.move_left(buffer),
-        Motion::CharRight => multi_cursor.move_right(buffer, vim_mode),
-        Motion::CharUp => multi_cursor.move_up(buffer, vim_mode),
-        Motion::CharDown => multi_cursor.move_down(buffer, vim_mode),
+        Motion::CharRight => multi_cursor.move_right(buffer, editor_mode),
+        Motion::CharUp => multi_cursor.move_up(buffer, editor_mode),
+        Motion::CharDown => multi_cursor.move_down(buffer, editor_mode),
         Motion::NextWordStart(big_word) => multi_cursor.move_word_forward(buffer, big_word),
         Motion::PrevWord(big_word) => multi_cursor.move_word_backward(buffer, big_word),
         Motion::NextWordEnd(big_word) => multi_cursor.move_word_end(buffer, big_word),

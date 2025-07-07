@@ -10,4 +10,4 @@ path = "lib.rs"
 iced.workspace          = true
 iced_graphics.workspace = true
 atlas-engine.workspace  = true
-atlas-vim.workspace     = true
+atlas-keys.workspace    = true

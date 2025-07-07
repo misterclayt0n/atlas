@@ -8,7 +8,7 @@ use iced::widget::pane_grid::{self, Pane};
 pub use multi_cursor::MultiCursor;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VimMode {
+pub enum EditorMode {
     Normal,
     Insert,
     Visual

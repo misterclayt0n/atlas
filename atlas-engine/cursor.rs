@@ -1,7 +1,7 @@
 use iced::Point;
 
 use super::buffer::Buffer;
-use crate::VimMode;
+use crate::EditorMode;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
@@ -162,13 +162,13 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_right(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
+    pub fn move_right(&mut self, buffer: &Buffer, editor_mode: &EditorMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
         // In Normal mode, cursor can't go past the last character
         // In Insert mode, cursor can go one position past the last character
-        let max_col = self.get_max_col(vim_mode, buffer, cur.line);
+        let max_col = self.get_max_col(editor_mode, buffer, cur.line);
 
         if cur.col >= max_col {
             return None;
@@ -184,7 +184,7 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_up(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
+    pub fn move_up(&mut self, buffer: &Buffer, editor_mode: &EditorMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -195,7 +195,7 @@ impl Cursor {
         let target_line = cur.line - 1;
         let target_col = self.preferred_column.unwrap_or(cur.col);
 
-        let max_col = self.get_max_col(vim_mode, buffer, target_line);
+        let max_col = self.get_max_col(editor_mode, buffer, target_line);
         let new_col = target_col.min(max_col);
         let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line - 1, new_col, new_off);
@@ -206,7 +206,7 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_down(&mut self, buffer: &Buffer, vim_mode: &VimMode) -> Option<TextPosition> {
+    pub fn move_down(&mut self, buffer: &Buffer, editor_mode: &EditorMode) -> Option<TextPosition> {
         let cur = self.position();
         buffer.validate_position(&cur);
 
@@ -217,7 +217,7 @@ impl Cursor {
         let target_line = cur.line + 1;
         let target_col = self.preferred_column.unwrap_or(cur.col);
 
-        let max_col = self.get_max_col(vim_mode, buffer, target_line);
+        let max_col = self.get_max_col(editor_mode, buffer, target_line);
         let new_col = target_col.min(max_col);
         let new_off = buffer.grapheme_col_to_offset(target_line, new_col);
         let new_pos = TextPosition::new(cur.line + 1, new_col, new_off);
@@ -469,9 +469,9 @@ impl Cursor {
         }
     }
 
-    pub fn adjust_for_mode(&mut self, buffer: &Buffer, vim_mode: &VimMode) {
-        match vim_mode {
-            VimMode::Normal => {
+    pub fn adjust_for_mode(&mut self, buffer: &Buffer, editor_mode: &EditorMode) {
+        match editor_mode {
+            EditorMode::Normal => {
                 // Clear selection when entering Normal mode.
                 if self.has_selection() {
                     self.clear_selection();
@@ -487,13 +487,13 @@ impl Cursor {
                     self.set_position(new_pos, true);
                 }
             }
-            VimMode::Insert => {
+            EditorMode::Insert => {
                 // Clear selection when entering Insert mode.
                 if self.has_selection() {
                     self.clear_selection();
                 }
             }
-            VimMode::Visual => {
+            EditorMode::Visual => {
                 // Start selection when entering Visual mode if we don't already have one.
                 if !self.has_selection() {
                     self.start_selection();
@@ -502,13 +502,13 @@ impl Cursor {
         }
     }
 
-    fn get_max_col(&self, vim_mode: &VimMode, buffer: &Buffer, target: usize) -> usize {
-        match vim_mode {
-            VimMode::Normal | VimMode::Visual => {
+    fn get_max_col(&self, editor_mode: &EditorMode, buffer: &Buffer, target: usize) -> usize {
+        match editor_mode {
+            EditorMode::Normal | EditorMode::Visual => {
                 let line_len = buffer.grapheme_len(target);
                 if line_len == 0 { 0 } else { line_len - 1 }
             }
-            VimMode::Insert => buffer.grapheme_len(target),
+            EditorMode::Insert => buffer.grapheme_len(target),
         }
     }
 }
