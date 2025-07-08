@@ -71,6 +71,7 @@ pub enum Action {
     RepeatLast,
     Backspace,
     Delete,
+    DeleteSelection,
     AddCursor, // NOTE: This is likely just mocked.
     RemoveSecondaryCursors,
 }
@@ -156,29 +157,29 @@ impl KeyEngine {
             }
 
             Visual => {
-                if let KeyEvent::Key {
-                    key: Key::Character(ref s),
-                    ..
-                } = key
-                {
-                    if s.len() == 1 {
-                        let c = s.chars().next().unwrap();
+                if let Some(action) = self.keymap.handle_key(&self.mode, &key, None) {
+                    // NOTE: This is a bad way of doing this but will do it for now.
+                    if let EngineAction::Action(Action::DeleteSelection) = action {
+                        self.mode = Normal;
+                    }
+                    
+                    return Some(action);
+                }
 
-                        // Handle movement in visual mode just like we do in normal mode.
-                        if let Some(motion) = Motion::from_hjkl(c) {
-                            return Some(EngineAction::Action(Action::Move { motion, count: 1 }));
-                        }
+                if let KeyEvent::Key { key: Key::Character(ref s), .. } = key {
+                    let c = s.chars().next().unwrap();
 
-                        // Handle operators in visual mode, also just like we do it in normal mode.
-                        if let Some(op) = Operator::from_char(c) {
-                            // In visual mode, operators work on the selection.
-                            self.mode = Normal;
-                            return Some(EngineAction::Action(Action::Operate {
-                                _op: op,
-                                _motion: Motion::CharRight, // Placeholder - will use selection.
-                                _count: 1,
-                            }));
-                        }
+                    if let Some(motion) = Motion::from_hjkl(c) {
+                        return Some(EngineAction::Action(Action::Move { motion, count: 1 }));
+                    }
+
+                    if let Some(op) = Operator::from_char(c) {
+                        self.mode = Normal;
+                        return Some(EngineAction::Action(Action::Operate {
+                            _op: op,
+                            _motion: Motion::CharRight,
+                            _count: 1,
+                        }));
                     }
                 }
 
@@ -186,7 +187,6 @@ impl KeyEngine {
                     self.mode = Normal;
                     return Some(EngineAction::Action(Action::ChangeMode(Normal)));
                 }
-
                 None
             }
         }
@@ -219,15 +219,16 @@ pub enum KeyEvent {
 
 pub fn execute(action: Action, buffer: &mut Buffer, multi_cursor: &mut MultiCursor, editor_mode: &EditorMode) {
     match action {
-        Action::InsertChar(c) => buffer.insert_char(multi_cursor, c),
-        Action::InsertText(s) => buffer.insert_text(multi_cursor, s.as_str()),
-        Action::Move { motion, .. } => apply_motion(motion, buffer, multi_cursor, editor_mode),
-        Action::Operate { .. } => println!("Todo!"),
+        Action::InsertChar(c)        => buffer.insert_char(multi_cursor, c),
+        Action::InsertText(s)        => buffer.insert_text(multi_cursor, s.as_str()),
+        Action::Move { motion, .. }  => apply_motion(motion, buffer, multi_cursor, editor_mode),
+        Action::Operate { .. }       => println!("Todo!"),
         Action::ChangeMode(new_mode) => multi_cursor.adjust_for_mode(buffer, &new_mode),
-        Action::RepeatLast => println!("Handled by engine"),
-        Action::Backspace => buffer.backspace(multi_cursor),
-        Action::InsertNewline => buffer.insert_newline(multi_cursor),
-        Action::Delete => buffer.delete(multi_cursor),
+        Action::RepeatLast           => println!("Handled by engine"),
+        Action::Backspace            => buffer.backspace(multi_cursor),
+        Action::InsertNewline        => buffer.insert_newline(multi_cursor),
+        Action::Delete               => buffer.delete(multi_cursor),
+        Action::DeleteSelection      => buffer.delete_selection(multi_cursor),
         
         // MOCKED
         Action::AddCursor => {

@@ -151,10 +151,13 @@ impl Keymap {
         self.set(Normal, ".", Command(Action::RepeatLast));
 
         // Operators.
-        self.set(Normal, "d", KeyOperator(Operator::Delete));
-        self.set(Normal, "y", KeyOperator(Operator::Yank));
-        self.set(Normal, "c", KeyOperator(Operator::Change));
+        // self.set(Normal, "d", KeyOperator(Operator::Delete));
+        // self.set(Normal, "y", KeyOperator(Operator::Yank));
+        // self.set(Normal, "c", KeyOperator(Operator::Change));
 
+        self.set(Normal, "d", Command(Action::DeleteSelection));
+        self.set(Visual, "d", Command(Action::DeleteSelection));
+        
         // Testing multiple cursors.
         self.set(Normal, "<S-c>", Command(Action::AddCursor));
         self.set(Normal, "<S-r>", Command(Action::RemoveSecondaryCursors));
