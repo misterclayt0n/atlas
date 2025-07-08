@@ -11,3 +11,4 @@ iced.workspace          = true
 iced_graphics.workspace = true
 atlas-engine.workspace  = true
 atlas-keys.workspace    = true
+atlas-config.workspace  = true

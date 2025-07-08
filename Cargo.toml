@@ -1,11 +1,12 @@
 [workspace]
-members  = ["atlas", "atlas-engine", "atlas-keys", "atlas-widgets"] 
+members  = ["atlas", "atlas-config", "atlas-engine", "atlas-keys", "atlas-widgets", "atlas-config"] 
 resolver = "3"
 
 [workspace.dependencies]
 atlas-engine   = { path = "atlas-engine" }
 atlas-keys     = { path = "atlas-keys" }
 atlas-widgets  = { path = "atlas-widgets" }
+atlas-config   = { path = "atlas-config" }
 
 iced                 = { version = "0.13.1", features = ["canvas", "debug", "advanced"]}
 iced_graphics        = "0.13"

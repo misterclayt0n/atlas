@@ -1,20 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use atlas_config::Config;
 use atlas_engine::{Buffer, Message, MultiCursor, EditorMode};
 use atlas_keys::{KeyEvent, KeyEngine, execute};
 use iced::{
-    Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme,
     advanced::{
-        Clipboard, Layout, Shell, Text, Widget,
-        graphics::core::{event, widget},
-        layout, mouse, renderer,
-        text::Paragraph as _,
-        widget::Tree,
-    },
-    alignment,
-    keyboard::{self, Key},
-    widget::span,
+        graphics::core::{event, widget}, layout, mouse, renderer, text::Paragraph as _, widget::Tree, Clipboard, Layout, Shell, Text, Widget
+    }, alignment, keyboard::{self, Key}, widget::span, Border, Color, Element, Event, Point, Rectangle, Renderer, Shadow, Size, Theme
 };
 use iced_graphics::{core::SmolStr, text::Paragraph};
 
@@ -29,6 +22,7 @@ pub struct Editor {
     pub scroll_offset: Point,
     pub key_engine: KeyEngine,
     pub is_focused: bool,
+    pub config: Config,
 }
 
 #[derive(Default, Debug)]
@@ -47,6 +41,7 @@ impl Default for Editor {
             key_engine: KeyEngine::default(),
             scroll_offset: Point::new(0.0, 0.0),
             is_focused: false,
+            config: Config::default(),
         }
     }
 }
@@ -80,7 +75,7 @@ impl Editor {
 
         // Fallback.
         println!("Got to fallback");
-        let size: f32 = renderer.default_size().into();
+        let size: f32 = self.config.font_size.into();
         size * 0.6
     }
 
@@ -90,7 +85,7 @@ impl Editor {
         bounds: iced::Size,
         renderer: &impl iced::advanced::text::Renderer<Font = iced::Font>,
     ) -> Paragraph {
-        let font_size: f32 = renderer.default_size().into();
+        let font_size: f32 = self.config.font_size.into();
 
         iced_graphics::text::Paragraph::with_spans::<()>(iced::advanced::text::Text {
             bounds,
@@ -105,8 +100,8 @@ impl Editor {
         })
     }
 
-    fn line_height(&self, renderer: &impl iced::advanced::text::Renderer) -> f32 {
-        let size: f32 = renderer.default_size().into();
+    fn line_height(&self, _renderer: &impl iced::advanced::text::Renderer) -> f32 {
+        let size: f32 = self.config.font_size.into();
         size * 1.2
     }
 
@@ -208,7 +203,7 @@ impl Editor {
                 Text {
                     content: char_under_cursor.to_string(),
                     bounds: cursor_bounds.size(),
-                    size: renderer.default_size(),
+                    size: self.config.font_size,
                     line_height: line_height.into(),
                     font: renderer.default_font(),
                     horizontal_alignment: alignment::Horizontal::Center,
@@ -407,7 +402,7 @@ where
                 Text {
                     content: visible_content,
                     bounds: Size::new(bounds.width, line_height), // Size per line.
-                    size: renderer.default_size(),
+                    size: self.config.font_size,
                     line_height: 1.2.into(),
                     font: renderer.default_font(),
                     horizontal_alignment: alignment::Horizontal::Left,

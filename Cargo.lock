@@ -281,6 +281,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atlas-config"
+version = "0.1.0"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "atlas-engine"
 version = "0.1.0"
 dependencies = [
@@ -301,6 +308,7 @@ dependencies = [
 name = "atlas-widgets"
 version = "0.1.0"
 dependencies = [
+ "atlas-config",
  "atlas-engine",
  "atlas-keys",
  "iced",
