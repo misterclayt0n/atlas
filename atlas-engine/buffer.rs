@@ -279,16 +279,9 @@ impl Buffer {
             self.validate_position(&start);
             self.validate_position(&end);
 
-            let (del_start, del_end) = if start == end {
-                let next = self.next_grapheme_offset(start.offset);
-                if next == start.offset {
-                    return;
-                }
-
-                (start.offset, next)
-            } else {
-                (start.offset, end.offset)
-            };
+            let del_start = start.offset;
+            let del_end   = self.next_grapheme_offset(end.offset);
+            
             self.content.remove(del_start .. del_end);
             
             let mut new_pos = start;
