@@ -389,7 +389,9 @@ where
         let visible_cols = (bounds.width / char_w).ceil() as usize;
 
         // Draw selection background.
-        self.draw_selection(renderer, bounds, char_w, line_height);
+        if self.key_engine.mode != EditorMode::Insert {
+            self.draw_selection(renderer, bounds, char_w, line_height);
+        } 
 
         // Render each visible line.
         for line_idx in first_line..end_line {
