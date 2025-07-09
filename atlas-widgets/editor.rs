@@ -236,7 +236,9 @@ impl Editor {
                 let start_x = bounds.x + (start.col as f32 * char_width - self.scroll_offset.x);
                 let start_y =
                     bounds.y + (start.line as f32 * line_height - self.scroll_offset.y);
-                let mut width = (end.col - start.col) as f32 * char_width;
+                
+                // NOTE: We add 1 here to treat the upper bound as inclusive.
+                let mut width = (end.col - start.col + 1) as f32 * char_width;
 
                 // Ensure minimum width for empty selections (like newlines).
                 if width < char_width * 0.5 {
