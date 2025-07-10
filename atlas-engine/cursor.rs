@@ -18,7 +18,7 @@ pub struct TextPosition {
     pub offset: usize, // Linear position in the buffer (character count from start).
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum CharClass {
     Whitespace,
     Word,
@@ -219,169 +219,331 @@ impl Cursor {
         Some(new_pos)
     }
 
-    pub fn move_word_forward(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
-        let total_chars = buffer.content.len_chars();
-        let initial_pos = self.position();
+    pub fn move_word_forward(
+        &mut self,
+        buffer: &Buffer,
+        big_word: bool,
+        editor_mode: &EditorMode,
+    ) -> Option<TextPosition> {
+        let total = buffer.content.len_chars();
+        let start = self.position();
+        buffer.validate_position(&start);
 
-        buffer.validate_position(&initial_pos);
-
-        let line_start = buffer.content.line_to_char(initial_pos.line);
-
-        assert!(
-            line_start <= total_chars,
-            "Line start offset {} exceeds total characters {}",
-            line_start,
-            total_chars
-        );
-
-        let mut char_idx = line_start + initial_pos.col;
-
-        // If we're at or beyond the end of the buffer, no movement is possible.
-        if char_idx >= total_chars {
+        let mut off = start.offset;
+        if off >= total {
             return None;
         }
 
-        // Get the current character and it's class.
-        let c = buffer.content.char(char_idx);
-        let current_class = get_char_class(c, big_word);
-
-        // Skip over characters of the same class.
-        while char_idx < total_chars {
-            let c = buffer.content.char(char_idx);
-            let class = get_char_class(c, big_word);
-            if class == current_class {
-                char_idx += 1; // Move to next character.
-            } else {
-                break;
-            }
+        let cur_class = get_char_class(buffer.content.char(off), big_word);
+        while off < total && get_char_class(buffer.content.char(off), big_word) == cur_class {
+            off += 1;
         }
-
-        // Skip over any whitespace characters.
-        while char_idx < total_chars {
-            let c = buffer.content.char(char_idx);
-            if get_char_class(c, big_word) == CharClass::Whitespace {
-                char_idx += 1;
-            } else {
-                break;
-            }
-        }
-
-        // If we've reached the end, no valid position is found.
-        if char_idx >= total_chars {
+        if off >= total {
             return None;
         }
-
-        // Convert char_idx to TextPosition.
-        let new_line = buffer.content.char_to_line(char_idx);
-        let line_start = buffer.content.line_to_char(new_line);
-
-        assert!(
-            line_start <= total_chars,
-            "New line start offset {} exceeds total characters {}",
-            line_start,
-            total_chars
-        );
-
-        let new_col = char_idx - line_start;
-        let new_pos = TextPosition::new(new_line, new_col, char_idx);
-
-        buffer.validate_position(&new_pos);
         
-        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
-        self.move_to(
-            new_pos,
-            MoveOpts {
-                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
-                update_preferred_col: true,
-            },
-            buffer,
-        );
+        while off < total && buffer.content.char(off).is_whitespace() {
+            let ch = buffer.content.char(off);
+            if ch == '\n' {
+                off += 1;
+                if off < total {
+                    let next_ch = buffer.content.char(off);
+                    if next_ch == '\t' || next_ch == ' ' {
+                        let line = buffer.content.char_to_line(off);
+                        let line_start = buffer.content.line_to_char(line);
+                        if off == line_start {
+                            break; 
+                        }
+                    }
+                }
+            } else {
+                off += 1;
+            }
+        }
+        
+        if off >= total {
+            return None;
+        }
+        
+        let landed_class = if off < total { get_char_class(buffer.content.char(off), big_word) } else { CharClass::Whitespace };
+        
+        match landed_class {
+            CharClass::Word => {
+                while off + 1 < total 
+                    && buffer.content.char(off + 1) != '\n'
+                    && get_char_class(buffer.content.char(off + 1), big_word) == CharClass::Word 
+                {
+                    off += 1;
+                }
+                
+                if cur_class == CharClass::Punctuation && off + 1 < total && buffer.content.char(off + 1) != '\n' {
+                    let next_class = get_char_class(buffer.content.char(off + 1), big_word);
+                    if next_class == CharClass::Whitespace {
+                        off += 1;
+                    }
+                }
+            }
+            CharClass::Punctuation => {
+                while off + 1 < total 
+                    && buffer.content.char(off + 1) != '\n'
+                    && get_char_class(buffer.content.char(off + 1), big_word) == CharClass::Punctuation 
+                {
+                    off += 1;
+                }
+                
+                if off + 1 < total && buffer.content.char(off + 1) != '\n' {
+                    let next_class = get_char_class(buffer.content.char(off + 1), big_word);
+                    if next_class == CharClass::Whitespace {
+                        off += 1;
+                    }
+                }
+            }
+            CharClass::Whitespace => {
+                // Already at whitespace, no need to move.
+            }
+        }
 
-        Some(new_pos)
-    }
+        if off < total && buffer.content.char(off) == '\n' && off + 1 < total {
+            off += 1;
+        }
 
-    pub fn move_word_backward(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
-        let total_chars = buffer.content.len_chars();
-        let initial_pos = self.position();
+        if big_word {
+            while off < total
+                && buffer.content.char(off).is_whitespace()
+                && buffer.content.char(off) != '\n'
+            {
+                off += 1;
+            }
+        }
 
-        buffer.validate_position(&initial_pos);
-
-        let line_start = buffer.content.line_to_char(initial_pos.line);
-
-        assert!(
-            line_start <= total_chars,
-            "Line start offset {} exceeds total characters {}",
-            line_start,
-            total_chars
-        );
-
-        let mut char_idx = line_start + initial_pos.col;
-
-        if char_idx == 0 {
+        if off >= total {
             return None;
         }
 
-        // Move the cursor one step back to start looking at the previous character.
-        char_idx = char_idx.saturating_sub(1);
+        let line = buffer.content.char_to_line(off);
+        let col = off - buffer.content.line_to_char(line);
+        let dest = TextPosition::new(line, col, off);
+        buffer.validate_position(&dest);
 
-        // Get the current character and it's class.
-        let c = buffer.content.char(char_idx);
-        let current_class = get_char_class(c, big_word);
-
-        // Skip any trailing whitespace.
-        while char_idx > 0 {
-            let c = buffer.content.char(char_idx);
-            let class = get_char_class(c, big_word);
-            if class == current_class {
-                char_idx = char_idx.saturating_sub(1);
-            } else {
-                break;
-            }
-        }
-
-        // Skip all characters that are of the same class.
-        while char_idx > 0 {
-            let c = buffer.content.char(char_idx);
-            let class = get_char_class(c, big_word);
-            if class == current_class {
-                char_idx = char_idx.saturating_sub(1);
-            } else {
-                // Stop at the boundary between different character classes.
-                char_idx += 1;
-                break;
-            }
-        }
-
-        while char_idx > 0 {
-            let c = buffer.content.char(char_idx);
-            let class = get_char_class(c, big_word);
-            if class == CharClass::Whitespace {
-                char_idx = char_idx.saturating_sub(1);
-            } else {
-                break;
-            }
-        }
-
-        let new_line = buffer.content.char_to_line(char_idx);
-        let new_line_start = buffer.content.line_to_char(new_line);
-        let new_col = char_idx - new_line_start;
-        let new_pos = TextPosition::new(new_line, new_col, char_idx);
-
-        buffer.validate_position(&new_pos);
         let keep_anchor = matches!(editor_mode, EditorMode::Visual);
         self.move_to(
-            new_pos,
+            dest,
             MoveOpts {
-                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
+                anchor: if keep_anchor {
+                    Some(self.anchor)
+                } else {
+                    Some(start)
+                },
                 update_preferred_col: true,
             },
             buffer,
-        );
-
-        Some(new_pos)
+        )
     }
 
-    pub fn move_word_end(&mut self, buffer: &Buffer, big_word: bool, editor_mode: &EditorMode) -> Option<TextPosition> {
+    pub fn move_word_backward(
+        &mut self,
+        buffer: &Buffer,
+        big_word: bool,
+        editor_mode: &EditorMode,
+    ) -> Option<TextPosition> {
+        let start = self.position();
+        buffer.validate_position(&start);
+
+        if start.offset == 0 {
+            return None;
+        }
+
+        let mut off = start.offset;
+        
+        let at_word_start = if start.offset == 0 {
+            true
+        } else {
+            let cur_char = buffer.content.char(start.offset);
+            let cur_class = get_char_class(cur_char, big_word);
+            
+            let prev_char = buffer.content.char(start.offset - 1);
+            let prev_class = get_char_class(prev_char, big_word);
+            
+            prev_char.is_whitespace() || prev_char == '\n' || 
+            (!big_word && cur_class == CharClass::Punctuation) ||
+            (cur_class != prev_class)
+        };
+        
+        if !at_word_start {
+            let cur_char = buffer.content.char(off);
+            let cur_class = get_char_class(cur_char, big_word);
+            
+            if !big_word && cur_class == CharClass::Punctuation {
+            } else {
+                while off > 0 {
+                    let prev_char = buffer.content.char(off - 1);
+                    if prev_char.is_whitespace() || prev_char == '\n' {
+                        break;
+                    }
+                    let prev_class = get_char_class(prev_char, big_word);
+                    if prev_class != cur_class {
+                        break;
+                    }
+                    off -= 1;
+                }
+            }
+        } else {
+            let at_line_start = start.col == 0;
+            
+            off -= 1;
+            
+            let mut landed_char = buffer.content.char(off);
+            let mut landed_class = get_char_class(landed_char, big_word);
+            
+            if landed_char == '\n' && off > 0 {
+                off -= 1;
+
+                landed_char = buffer.content.char(off);
+                landed_class = get_char_class(landed_char, big_word);
+            }
+            
+            let char_class = landed_class;
+            
+            if char_class == CharClass::Whitespace {
+                let whitespace_start = off;
+                
+                while off > 0 {
+                    let prev_char = buffer.content.char(off - 1);
+                    if !prev_char.is_whitespace() || prev_char == '\n' {
+                        break;
+                    }
+                    off -= 1;
+                }
+                
+                let whitespace_len = whitespace_start - off + 1;
+                let at_line_beginning = {
+                    let line = buffer.content.char_to_line(off);
+                    let line_start = buffer.content.line_to_char(line);
+                    off == line_start
+                };
+                
+                if whitespace_len == 1 && !at_line_beginning && off > 0 {
+                    off -= 1;
+                    
+                    let new_char = buffer.content.char(off);
+                    let new_class = get_char_class(new_char, big_word);
+                    
+                    if new_class == CharClass::Word {
+                        while off > 0 {
+                            let prev_char = buffer.content.char(off - 1);
+                            if prev_char.is_whitespace() || prev_char == '\n' {
+                                break;
+                            }
+                            let prev_class = get_char_class(prev_char, big_word);
+                            if prev_class != new_class {
+                                break;
+                            }
+                            off -= 1;
+                        }
+                    } else if new_class == CharClass::Punctuation && !big_word {
+                        while off > 0 {
+                            let prev_char = buffer.content.char(off - 1);
+                            if prev_char.is_whitespace() || prev_char == '\n' {
+                                break;
+                            }
+                            let prev_class = get_char_class(prev_char, big_word);
+                            if prev_class != CharClass::Punctuation {
+                                break;
+                            }
+                            off -= 1;
+                        }
+                    }
+                } else {
+                }
+            } else if char_class == CharClass::Punctuation {
+                if at_line_start && !big_word {
+                    // NOTE: When at the beginning of a line, scan backwards through punctuation
+                    // to find a meaningful boundary (like "()").
+                    let mut scan_off = off;
+                    while scan_off > 0 {
+                        let ch = buffer.content.char(scan_off);
+                        if ch.is_whitespace() || ch == '\n' {
+                            break;
+                        }
+                        
+                        let ch_class = get_char_class(ch, big_word);
+                        if ch_class != CharClass::Punctuation {
+                            break;
+                        }
+                        
+                        if ch == '"' || ch == '\'' || ch == '(' || ch == '[' || ch == '{' || ch == '<' {
+                            off = scan_off;
+                            break;
+                        }
+                        
+                        scan_off -= 1;
+                    }
+                } else if !big_word {
+                    while off > 0 {
+                        let prev_char = buffer.content.char(off - 1);
+                        if prev_char.is_whitespace() || prev_char == '\n' {
+                            break;
+                        }
+                        let prev_class = get_char_class(prev_char, big_word);
+                        if prev_class != CharClass::Punctuation {
+                            break;
+                        }
+                        off -= 1;
+                    }
+                } else {
+                    while off > 0 {
+                        let prev_char = buffer.content.char(off - 1);
+                        if prev_char.is_whitespace() || prev_char == '\n' {
+                            break;
+                        }
+                        let prev_class = get_char_class(prev_char, big_word);
+                        if prev_class != char_class {
+                            break;
+                        }
+                        off -= 1;
+                    }
+                }
+            } else {
+                while off > 0 {
+                    let prev_char = buffer.content.char(off - 1);
+                    if prev_char.is_whitespace() || prev_char == '\n' {
+                        break;
+                    }
+                    let prev_class = get_char_class(prev_char, big_word);
+                    if prev_class != char_class {
+                        break;
+                    }
+                    off -= 1;
+                }
+            }
+        }
+        
+        let line = buffer.content.char_to_line(off);
+        let col = off - buffer.content.line_to_char(line);
+        let dest = TextPosition::new(line, col, off);
+        buffer.validate_position(&dest);
+
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        self.move_to(
+            dest,
+            MoveOpts {
+                anchor: if keep_anchor {
+                    Some(self.anchor)
+                } else {
+                    Some(start)
+                },
+                update_preferred_col: true,
+            },
+            buffer,
+        )
+    }
+
+    pub fn move_word_end(
+        &mut self,
+        buffer: &Buffer,
+        big_word: bool,
+        editor_mode: &EditorMode,
+    ) -> Option<TextPosition> {
         let total_chars = buffer.content.len_chars();
         let initial_pos = self.position();
 
@@ -430,7 +592,7 @@ impl Cursor {
             }
         }
 
-        // Convert char index back to TextPosition
+        // Convert char index back to TextPosition.
         let new_line = buffer.content.char_to_line(last_char_index);
         let new_line_start = buffer.content.line_to_char(new_line);
         let new_col = last_char_index - new_line_start;
@@ -441,7 +603,11 @@ impl Cursor {
         self.move_to(
             new_pos,
             MoveOpts {
-                anchor: if keep_anchor { Some(self.anchor) } else { Some(initial_pos) },
+                anchor: if keep_anchor {
+                    Some(self.anchor)
+                } else {
+                    Some(initial_pos)
+                },
                 update_preferred_col: true,
             },
             buffer,
@@ -525,5 +691,200 @@ impl TextPosition {
     /// Create a new position from line and column.
     pub fn new(line: usize, col: usize, offset: usize) -> Self {
         Self { line, col, offset }
+    }
+}
+
+
+//
+// NOTE: These tests are here to basically test how our movement logic is working compared to helix's.
+// The goal is to "feel" comparable, but does not need to be exactly the same thing.
+// 
+
+#[cfg(test)]
+mod helix_parity {
+    use super::*;
+    use crate::buffer::Buffer;
+    use crate::EditorMode;
+
+    /// Debug test to understand word movement.
+    #[test]
+    fn debug_word_movement() {
+        let text = "int main() {\n    printf(\"hello world\");\n}\n";
+        let buffer = Buffer::new(text, "debug test");
+        
+        let mut cursor = Cursor::new();
+        cursor.move_to(
+            TextPosition::new(0, 7, 7), // Position at 'n' in "main".
+            MoveOpts {
+                anchor: None,
+                update_preferred_col: true,
+            },
+            &buffer,
+        );
+        
+        // Try the word movement.
+        let result = cursor.move_word_forward(&buffer, false, &EditorMode::Normal);
+        
+        // Verify we moved from 'n' to the space after ')'.
+        assert!(result.is_some());
+        let pos = cursor.position();
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.col, 10); // Space after ')'.
+    }
+
+    /// Helix-compatible forward-word motion (`w`) over
+    /// 
+    /// ```c
+    ///      #include <stdio.h>
+    /// 
+    ///      int main() {
+    ///          printf("hello world");
+    ///      }
+    /// ````
+    ///
+    /// Starting from the # character all the way to the end and marking each point,
+    /// checking against helix.
+    #[test]
+    fn w_motion_matches_helix() {
+        let text = concat!(
+            "#include <stdio.h>\n",
+            "\n",
+            "int main() {\n",
+            "\tprintf(\"hello world\");\n", // Real tab before printf.
+            "}\n",
+        );
+        let buffer = Buffer::new(text, "helix-w-include test");
+
+        let mut cursor = Cursor::new();
+        cursor.move_to(
+            TextPosition::new(0, 0, 0),
+            MoveOpts { anchor: None, update_preferred_col: true },
+            &buffer,
+        );
+
+        // Expected (line, col) after each press of 'w'.
+        let expected: &[(usize, usize)] = &[
+            (0,  8),  // space between 'e' and '<'.
+            (0,  9),  // '<'.
+            (0, 14),  // 'o'  in "stdio".
+            (0, 15),  // '.'.
+            (0, 16),  // 'h'.
+            (0, 17),  // '>'.
+            (2,  3),  // space between 't' and 'm'.
+            (2,  7),  // 'n' (last char of "main").
+            (2, 10),  // space between ')' and '{'.
+            (2, 11),  // '{'.
+            (3,  0),  // indent (tab).
+            (3,  6),  // 'f' (last char of "printf").
+            (3,  8),  // '"'  after '('.
+            (3, 14),  // space between 'o' and 'w'.
+            (3, 19),  // 'd'.
+            (3, 22),  // ';'.
+            (4,  0),  // '}'.
+        ];
+
+        for (step, &(line, col)) in expected.iter().enumerate() {
+            cursor
+                .move_word_forward(&buffer, /*big_word=*/ false, &EditorMode::Normal)
+                .expect("`w` motion failed");
+
+            let pos = cursor.position();
+            assert_eq!(
+                (pos.line, pos.col),
+                (line, col),
+                "step {}: expected cursor at ({}, {}), got ({}, {})",
+                step + 1,
+                line, col,
+                pos.line, pos.col
+            );
+        }
+    }
+
+    /// Helix-compatible backward-word motion (`b`) over the text
+    /// 
+    /// ```c
+    ///     #include <stdio.h>
+    ///
+    ///     int main() {
+    ///         printf("hello world");
+    ///     }
+    /// ```
+    /// Same thing as the above test, but starts from } and iterates by pressing "b".
+    #[test]
+    fn b_motion_matches_helix() {
+        let text = concat!(
+            "#include <stdio.h>\n",
+            "\n",
+            "int main() {\n",
+            "    printf(\"hello world\");\n",
+            "}\n",
+        );
+        let buffer = Buffer::new(text, "helix-b test");
+
+        // Place the cursor on the closing ‘}’.
+        let mut cursor = Cursor::new();
+        let start_off = buffer.grapheme_col_to_offset(4, 0);
+        cursor.move_to(
+            TextPosition::new(4, 0, start_off),
+            MoveOpts { anchor: None, update_preferred_col: true },
+            &buffer,
+        );
+
+        let expected: &[(usize, usize)] = &[
+            (3, 23), // '"'    after world.
+            (3, 18), // 'w'.
+            (3, 12), // 'h'.
+            (3, 10), // '('.
+            (3,  4), // 'p'.
+            (3,  0), // indent (first space).
+            (2, 11), // '{'.
+            (2,  8), // '('.
+            (2,  4), // 'm'.
+            (2,  0), // 'i'.
+            (0, 17), // '>'.
+            (0, 16), // 'h'.
+            (0, 15), // '.'.
+            (0, 10), // 's'.
+            (0,  9), // '<'.
+            (0,  1), // 'i'.
+            (0,  0), // '#'.
+        ];
+
+        for (step, &(line, col)) in expected.iter().enumerate() {
+            let start_pos = cursor.position();
+            let start_char = if start_pos.offset < buffer.content.len_chars() {
+                buffer.content.char(start_pos.offset)
+            } else {
+                '\0'
+            };
+            println!("Step {}: Starting from ({},{}) char='{}' offset={}", 
+                     step + 1, start_pos.line, start_pos.col, 
+                     if start_char == '\n' { '\\' } else { start_char }, 
+                     start_pos.offset);
+            
+            cursor
+                .move_word_backward(&buffer, /*big_word=*/ false, &EditorMode::Normal)
+                .expect("`b` motion failed");
+
+            let pos = cursor.position();
+            let end_char = if pos.offset < buffer.content.len_chars() {
+                buffer.content.char(pos.offset)
+            } else {
+                '\0'
+            };
+            println!("Step {}: Ended at ({},{}) char='{}' offset={}", 
+                     step + 1, pos.line, pos.col, 
+                     if end_char == '\n' { '\\' } else { end_char }, 
+                     pos.offset);
+            
+            assert_eq!(
+                (pos.line, pos.col),
+                (line, col),
+                "step {}: expected cursor at ({}, {}), got ({}, {})",
+                step + 1,
+                line, col,
+                pos.line, pos.col
+            );
+        }
     }
 }

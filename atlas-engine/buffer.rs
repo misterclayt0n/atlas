@@ -24,10 +24,10 @@ pub struct Buffer {
 /// - "Descending": Process cursors from right to left (highest offset to lowest), which means they're mostly used for deletions.
 ///
 /// Usage:
-/// ```
-/// multi_cursor_operation(multi_cursor, ascending, idx => {
+/// ```ignore
+/// multi_cursor_operation!(multi_cursor, ascending, idx => {
 ///     // Your operation code here using idx
-/// }};
+/// });
 /// ```
 macro_rules! multi_cursor_operation {
     ($multi_cursor:expr, ascending, $idx: ident => $body:block) => {{
