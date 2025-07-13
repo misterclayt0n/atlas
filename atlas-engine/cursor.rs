@@ -652,6 +652,7 @@ impl Cursor {
             EditorMode::Normal => {
                 let cur = self.position();
                 let line_len = buffer.grapheme_len(cur.line);
+                self.anchor = self.active;
                 if line_len > 0 && cur.col >= line_len {
                     // Move cursor back to the last character.
                     let new_col = line_len - 1;
