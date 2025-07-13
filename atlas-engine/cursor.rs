@@ -325,7 +325,11 @@ impl Cursor {
         let dest = TextPosition::new(line, col, off);
         buffer.validate_position(&dest);
 
-        let keep_anchor = matches!(editor_mode, EditorMode::Visual);
+        let start_class = get_char_class(buffer.content.char(start.offset), big_word);
+        let end_class   = get_char_class(buffer.content.char(off), big_word);
+        
+        let keep_anchor = matches!(editor_mode, EditorMode::Visual) && start_class == end_class;
+        
         self.move_to(
             dest,
             MoveOpts {
@@ -652,7 +656,6 @@ impl Cursor {
             EditorMode::Normal => {
                 let cur = self.position();
                 let line_len = buffer.grapheme_len(cur.line);
-                self.anchor = self.active;
                 if line_len > 0 && cur.col >= line_len {
                     // Move cursor back to the last character.
                     let new_col = line_len - 1;
@@ -731,6 +734,24 @@ mod helix_parity {
         let pos = cursor.position();
         assert_eq!(pos.line, 0);
         assert_eq!(pos.col, 10); // Space after ')'.
+    }
+
+    #[test]
+    fn visual_w_skips_leading_punct() {
+        let buffer  = Buffer::new("#include <stdio.h>", "t");
+        let mut cur = Cursor::new();
+
+        // put cursor on ‘#’, enter visual mode (anchor == active here)
+        cur.move_to(TextPosition::new(0, 0, 0),
+                    MoveOpts { anchor: None, update_preferred_col: true },
+                    &buffer);
+
+        // pretend we are in Visual mode and press ‘w’
+        cur.move_word_forward(&buffer, false, &EditorMode::Visual);
+
+        let (sel_start, sel_end) = cur.get_selection_range();
+        assert_eq!(buffer.content.slice(sel_start.offset .. sel_end.offset).to_string(),
+                   "include");
     }
 
     /// Helix-compatible forward-word motion (`w`) over
